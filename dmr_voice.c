@@ -18,12 +18,6 @@
 #include "dsd.h"
 #include "dmr_const.h"
 
-static unsigned char cach_deinterleave[24] = {
-     0,  7,  8,  9,  1, 10, 11, 12,
-     2, 13, 14, 15,  3, 16,  4, 17,
-    18, 19,  5, 20, 21, 22,  6, 23
-}; 
-
 static unsigned char hamming7_4_decode[64] =
 {
     0x00, 0x03, 0x05, 0xE7,     /* 0x00 to 0x07 */
@@ -98,11 +92,11 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
           if (opts->inverted_dmr == 1)
             dibit = (dibit ^ 2);
         }
-        cachbits[cach_deinterleave[2*i]] = (1 & (dibit >> 1));    // bit 1
-        cachbits[cach_deinterleave[2*i+1]] = (1 & dibit);   // bit 0
+        cachbits[2*i] = (1 & (dibit >> 1));    // bit 1
+        cachbits[2*i+1] = (1 & dibit);   // bit 0
       }
-      cach_hdr  = ((cachbits[0] << 0) | (cachbits[1] << 1) | (cachbits[2] << 2) | (cachbits[3] << 3));
-      cach_hdr |= ((cachbits[4] << 4) | (cachbits[5] << 5) | (cachbits[6] << 6));
+      cach_hdr  = ((cachbits[0] << 0) | (cachbits[4] << 1) | (cachbits[8] << 2) | (cachbits[12] << 3));
+      cach_hdr |= ((cachbits[14] << 4) | (cachbits[18] << 5) | (cachbits[22] << 6));
       cach_hdr_hamming = hamming7_4_correct(cach_hdr);
 
       state->currentslot = ((cach_hdr_hamming >> 1) & 1);      // bit 1
@@ -201,7 +195,9 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
 
       if ((j == 0) && (opts->errorbars == 1)) {
           int level = (int) state->max / 164;
-          printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  VOICE e:", state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"), level, state->slot0light, state->slot1light);
+          printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  VOICE e:",
+                  state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"), level,
+                  state->slot0light, state->slot1light);
       }
 
       // current slot frame 2 second half
@@ -254,27 +250,12 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
 
       // CACH
       for (i = 0; i < 12; i++) {
-          dibit = getDibit (opts, state);
-          cachdata[i] = dibit;
+        dibit = getDibit (opts, state);
+        cachbits[2*i] = (1 & (dibit >> 1));    // bit 1
+        cachbits[2*i+1] = (1 & dibit);   // bit 0
       }
-      cachdata[12] = 0;
-
-      k = 0;
-      for (i = 0; i < 12; i++) {
-          dibit = cachdata[i];
-          cachbits2[k++] = (1 & (dibit >> 1)) + 48;    // bit 1
-          cachbits2[k++] = (1 & dibit) + 48;   // bit 0
-      }
-      for (i = 0; i < 24; i++) {
-        cachbits[cach_deinterleave[i]] = cachbits2[i];
-      }
-      cachbits[24] = 0;
-
-      cach_hdr = 0;
-      for (i = 0; i < 7; i++) {
-        cach_hdr <<= 1;
-        cach_hdr |= (cachbits[i] - 0x30);
-      }
+      cach_hdr  = ((cachbits[0] << 0) | (cachbits[4] << 1) | (cachbits[8] << 2) | (cachbits[12] << 3));
+      cach_hdr |= ((cachbits[14] << 4) | (cachbits[18] << 5) | (cachbits[22] << 6));
       cach_hdr_hamming = hamming7_4_correct(cach_hdr);
 
       // next slot
