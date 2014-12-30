@@ -207,6 +207,7 @@ void cleanupAndExit (dsd_opts * opts, dsd_state * state);
 void sigfun (int sig);
 void processMbeFrame (dsd_opts * opts, dsd_state * state, char ambe_fr[4][24]);
 int getSymbol (dsd_opts * opts, dsd_state * state, int have_sync);
+int processBPTC(unsigned char infodata[196], unsigned char payload[97]);
 void processNXDNVoice (dsd_opts * opts, dsd_state * state);
 void processNXDNData (dsd_opts * opts, dsd_state * state);
 void processDSTAR (dsd_opts * opts, dsd_state * state);

@@ -16,7 +16,6 @@
  */
 
 #include "dsd.h"
-int processBPTC(unsigned char infodata[196], unsigned char payload[97]);
 
 static const char *slottype_to_string[16] = {
       "PI Header    ", // 0000
