@@ -131,15 +131,15 @@ getSymbol (dsd_opts * opts, dsd_state * state, int have_sync)
               count++;
           }
       } else {
-          if (state->rf_mod == 0) {
+          if (state->rf_mod != 1) {
               // 0: C4FM modulation
+              // 2: GFSK modulation
               if ((i >= state->symbolCenter - 1) && (i <= state->symbolCenter + 2)) {
                   sum += sample;
                   count++;
               }
           } else {
               // 1: QPSK modulation
-              // 2: GFSK modulation
               // Note: this has been changed to use an additional symbol to the left
               // On the p25_raw_unencrypted.flac it is evident that the timing
               // comes one sample too late.
