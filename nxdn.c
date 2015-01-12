@@ -50,23 +50,10 @@ void
 processNXDNVoice (dsd_opts * opts, dsd_state * state)
 {
   int i, j, dibit;
-  int *dibit_p;
   int level = (int) state->max / 164;
-  char lich[9];
-  char lich_scram[9] = { 0, 0, 1, 0, 0, 1, 1, 1, 0 };
   char ambe_fr[4][24];
   const int *w, *x, *y, *z;
   const char *pr;
-
-  dibit_p = state->dibit_buf_p - 8;
-
-  for (i = 0; i < 8; i++) {
-    dibit = *dibit_p++;
-    if(lich_scram[i] ^ (state->lastsynctype & 0x1)) {
-      dibit = (dibit ^ 2);
-    }
-    lich[i] = 1 & (dibit >> 1);
-  }
 
   if (opts->errorbars) {
     printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  VOICE e:",
