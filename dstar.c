@@ -38,7 +38,9 @@ void processDSTAR(dsd_opts * opts, dsd_state * state) {
     int level = (int) state->max / 164;
 
     if (opts->errorbars) {
-        printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  VOICE e:", state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"), level, state->slot0light, state->slot1light);
+        printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  VOICE e:",
+                state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"),
+                level, state->slot0light, state->slot1light);
     }
 
 	if (state->synctype == 18) {

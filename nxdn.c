@@ -18,26 +18,28 @@ processNXDNData (dsd_opts * opts, dsd_state * state)
       lich[i] = 1 & (dibit >> 1);
   }
 
-  if (opts->errorbars == 1) {
-      switch((lich[0] << 1) | lich[1])
-      {
+  if (opts->errorbars) {
+      printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  DATA: ",
+              state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"),
+              level, state->slot0light, state->slot1light);
+      switch((lich[0] << 1) | lich[1]) {
         case 0:
-          printf(" Trunk-C Control Ch ");
+          printf("Trunk-C Control Ch ");
           break;
         case 1:
-          printf(" Trunk-C Traffic Ch ");
+          printf("Trunk-C Traffic Ch ");
           break;
         case 2:
           if(lich[6])
-            printf ( " Repeater Ch ");
+            printf("Repeater Ch ");
           else
-            printf(" Mobile Direct Ch ");
+            printf("Mobile Direct Ch ");
           break;
         case 3:
-          printf(" Trunk-D Composite Ch ");
+          printf("Trunk-D Composite Ch ");
           break;
       }
-      printf ("DATA    \n");
+      printf("\n");
   }
 
   skipDibit (opts, state, 174);
@@ -64,26 +66,10 @@ processNXDNVoice (dsd_opts * opts, dsd_state * state)
     lich[i] = 1 & (dibit >> 1);
   }
 
-  if (opts->errorbars == 1) {
-    switch((lich[0] << 1) | lich[1])
-    {
-      case 0:
-        printf(" Trunk-C Control Ch ");
-        break;
-      case 1:
-        printf(" Trunk-C Traffic Ch ");
-        break;
-      case 2:
-        if(lich[6])
-          printf ( " Repeater Ch ");
-        else
-          printf(" Mobile Direct Ch ");
-        break;
-      case 3:
-        printf(" Trunk-D Composite Ch ");
-        break;
-    }
-    printf ("VOICE e:");
+  if (opts->errorbars) {
+    printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  VOICE e:",
+            state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"),
+            level, state->slot0light, state->slot1light);
   }
 
   skipDibit (opts, state, 30);
