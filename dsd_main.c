@@ -48,7 +48,10 @@ noCarrier (dsd_opts * opts, dsd_state * state)
   state->errs = 0;
   state->errs2 = 0;
   state->lasttg = 0;
+  state->last_radio_id = 0;
+  state->lastp25type = 0;
   state->repeat = 0;
+  state->nac = 0;
   strcpy (state->slot0light, " slot0 ");
   strcpy (state->slot1light, " slot1 ");
   state->firstframe = 0;

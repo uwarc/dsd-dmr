@@ -103,11 +103,14 @@ typedef struct
   int rf_mod;
   int numflips;
   int lastsynctype;
+  int lastp25type;
   int offset;
   int carrier;
   unsigned int talkgroup;
   unsigned int lasttg;
   unsigned int radio_id;
+  unsigned int last_radio_id;
+  unsigned short nac;
   int errs;
   int errs2;
   int optind;
@@ -165,14 +168,14 @@ typedef struct
 #define INV_DSTAR_SYNC "131313131311313331131333"
 
 // Conventional
-#define NXDN_MS_DATA_SYNC      "313133113131111333"
-#define INV_NXDN_MS_DATA_SYNC  "131311331313333111"
-#define NXDN_MS_VOICE_SYNC     "313133113131113133"
-#define INV_NXDN_MS_VOICE_SYNC "131311331313331311"
-#define INV_NXDN_BS_DATA_SYNC  "131311331313333131"
 #define NXDN_BS_DATA_SYNC      "313133113131111313"
-#define INV_NXDN_BS_VOICE_SYNC "131311331313331331"
+#define NXDN_MS_DATA_SYNC      "313133113131111333"
 #define NXDN_BS_VOICE_SYNC     "313133113131113113"
+#define NXDN_MS_VOICE_SYNC     "313133113131113133"
+#define INV_NXDN_BS_DATA_SYNC  "131311331313333131"
+#define INV_NXDN_MS_DATA_SYNC  "131311331313333111"
+#define INV_NXDN_BS_VOICE_SYNC "131311331313331331"
+#define INV_NXDN_MS_VOICE_SYNC "131311331313331311"
 
 // Trunked
 #define NXDN_TC_VOICE_SYNC     "313133113113113113"
