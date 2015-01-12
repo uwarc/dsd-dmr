@@ -414,7 +414,7 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
               printf("PI Header: %s\n", packetdump);
             } else if ((bursttype == 1) || (bursttype == 2)) {
               unsigned char rs_mask = ((bursttype == 1) ? 0x96 : 0x99);
-              unsigned int nerrs = check_and_fix_reedsolomon_12_09_04(&state.ReedSolomon_12_09_04, payload, rs_mask);
+              unsigned int nerrs = check_and_fix_reedsolomon_12_09_04(&state->ReedSolomon_12_09_04, payload, rs_mask);
               state->debug_header_errors += nerrs;
               printf("%s: fid: %s (%u) \n", ((bursttype == 1) ? "VOICE Header" : "TLC"), fids[j], fid);
               if ((fid == 0) || (fid == 16)) { // Standard feature, MotoTRBO Capacity+

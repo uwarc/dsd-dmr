@@ -197,6 +197,9 @@ typedef struct
 /*
  * function prototypes
  */
+void Golay23_Correct(unsigned int *block);
+unsigned int Golay23_Encode(unsigned int cw);
+
 void processDMRdata (dsd_opts * opts, dsd_state * state);
 void processDMRvoice (dsd_opts * opts, dsd_state * state);
 void processAudio (dsd_opts * opts, dsd_state * state);
