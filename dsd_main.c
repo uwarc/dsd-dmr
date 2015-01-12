@@ -19,6 +19,10 @@
 #include "dsd.h"
 #include <sys/mman.h>
 
+/* specify irreducible polynomial coeffts */
+static unsigned char generator_polinomial_dmr[9] = { 1, 0, 1, 1, 1, 0, 0, 0, 1}; /* MM = 8, TT = 2 */
+static unsigned char generator_polinomial_p25[7] = { 1, 1, 0, 0, 0, 0, 1 }; /* MM = 6, TT = 8 */
+
 void
 noCarrier (dsd_opts * opts, dsd_state * state)
 {
@@ -68,8 +72,11 @@ static inline void initOpts (dsd_opts * opts)
   opts->audio_gain = 0;
   opts->wav_out_fd = -1;
   opts->uvquality = 3;
+  opts->mod_qpsk = 0;
   opts->inverted_dmr = 0;       // most transmitter + scanner + sound card combinations show non-inverted signals for this
+  opts->mod_threshold = 26;
   opts->ssize = 36;
+  opts->msize = 15;
 }
 
 static void initState (dsd_state * state)
@@ -92,11 +99,15 @@ static void initState (dsd_state * state)
   state->minref = -12000;
   state->maxref = 12000;
   state->lastsample = 0;
-  for (i = 0; i < 128; i++)
-    {
+  for (i = 0; i < 128; i++) {
       state->sbuf[i] = 0;
-    }
+  }
   state->sidx = 0;
+  for (i = 0; i < 1024; i++) {
+      state->maxbuf[i] = 15000;
+      state->minbuf[i] = -15000;
+  }
+  state->midx = 0;
   state->err_str[0] = 0;
   strcpy (state->ftype, "          ");
   state->symbolcnt = 0;
@@ -223,7 +234,10 @@ main (int argc, char **argv)
   vec.sa_handler = SIG_IGN;
   sigaction(SIGPIPE, &vec, NULL);
 
-  rs_init();
+  rs_init(&state.ReedSolomon_12_09_04, generator_polinomial_dmr, 8, 2);
+  rs_init(&state.ReedSolomon_24_12_13, generator_polinomial_p25, 6, 6);
+  rs_init(&state.ReedSolomon_24_16_09, generator_polinomial_p25, 6, 4);
+  rs_init(&state.ReedSolomon_36_20_17, generator_polinomial_p25, 4, 8);
 
   while ((c = getopt (argc, argv, "hep:qv:si:o:d:g:nw:B:C:R:f:u:x:S:")) != -1)
     {

@@ -215,11 +215,11 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
           if (state->firstframe == 1) { // we don't know if anything received before the first sync after no carrier is valid
               state->firstframe = 0;
           } else {
-              processMbeFrame (opts, state, ambe_fr);
+              processAMBEFrame (opts, state, ambe_fr);
               if (opts->errorbars == 1) {
                 printf ("%s", state->err_str);
               }
-              processMbeFrame (opts, state, ambe_fr2);
+              processAMBEFrame (opts, state, ambe_fr2);
               if (opts->errorbars == 1) {
                 printf ("%s", state->err_str);
               }
@@ -242,7 +242,7 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
       }
 
       if (mutecurrentslot == 0) {
-          processMbeFrame (opts, state, ambe_fr3);
+          processAMBEFrame (opts, state, ambe_fr3);
           if (opts->errorbars == 1) {
             printf ("%s", state->err_str);
           }

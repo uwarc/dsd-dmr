@@ -34,6 +34,7 @@
 #include <sys/soundcard.h>
 #include <math.h>
 #include <mbelib.h>
+#include "ReedSolomon.h"
 #define SAMPLE_RATE_IN 48000
 #define SAMPLE_RATE_OUT 8000
 
@@ -46,6 +47,8 @@ typedef struct
 {
   int errorbars;
   unsigned int verbose;
+  unsigned int p25status;
+  unsigned int p25tg;
   unsigned int datascope;
   int audio_in_fd;
   int audio_in_type; // 0 for device, 1 for file, 2 for portaudio
@@ -57,8 +60,11 @@ typedef struct
   unsigned int wav_out_samplerate;
   int wav_out_fd;
   unsigned int uvquality;
+  unsigned char frame_types; // 0 -> DMR, 1 -> DStar, 2 -> NXDN48, 3 -> NXDN96, 4 -> P25P1
   unsigned char inverted_dmr;
-  int ssize;
+  unsigned int ssize;
+  unsigned int msize;
+  unsigned int mod_threshold;
 } dsd_opts;
 
 typedef struct
@@ -87,6 +93,9 @@ typedef struct
   int lastsample;
   int sbuf[128];
   int sidx;
+  int maxbuf[1024];
+  int minbuf[1024];
+  int midx;
   char err_str[64];
   char fsubtype[16]; // kill
   char ftype[16];
@@ -121,6 +130,12 @@ typedef struct
 
   // Last dibit read
   int last_dibit;
+
+  ReedSolomon ReedSolomon_12_09_04;
+
+  ReedSolomon ReedSolomon_24_12_13;
+  ReedSolomon ReedSolomon_24_16_09;
+  ReedSolomon ReedSolomon_36_20_17;
 
 #ifdef TRACE_DSD
   char debug_prefix;
@@ -182,8 +197,6 @@ typedef struct
 /*
  * function prototypes
  */
-void rs_init(void);
-unsigned int check_and_fix_reedsolomon_12_09_04(unsigned char payload[97], unsigned char rs_mask);
 void processDMRdata (dsd_opts * opts, dsd_state * state);
 void processDMRvoice (dsd_opts * opts, dsd_state * state);
 void processAudio (dsd_opts * opts, dsd_state * state);
@@ -192,6 +205,7 @@ int openAudioInDevice (dsd_opts *opts, const char *audio_in_dev);
 
 int getDibit (dsd_opts * opts, dsd_state * state);
 void skipDibit (dsd_opts * opts, dsd_state * state, int count);
+void Shellsort_int(int *in, unsigned int n);
 
 void saveAmbe2450Data (dsd_opts * opts, dsd_state * state, char *ambe_d);
 void closeMbeOutFile (dsd_opts * opts, dsd_state * state);
@@ -205,7 +219,8 @@ void print_datascope(dsd_state *state, int lidx, int lbuf2[25]);
 void noCarrier (dsd_opts * opts, dsd_state * state);
 void cleanupAndExit (dsd_opts * opts, dsd_state * state);
 void sigfun (int sig);
-void processMbeFrame (dsd_opts * opts, dsd_state * state, char ambe_fr[4][24]);
+void processAMBEFrame (dsd_opts * opts, dsd_state * state, char ambe_fr[4][24]);
+void processIMBEFrame (dsd_opts * opts, dsd_state * state, char imbe_fr[8][23]);
 int getSymbol (dsd_opts * opts, dsd_state * state, int have_sync);
 int processBPTC(unsigned char infodata[196], unsigned char payload[97]);
 void processNXDNVoice (dsd_opts * opts, dsd_state * state);

@@ -77,7 +77,7 @@ void processDSTAR(dsd_opts * opts, dsd_state * state) {
 			w++;
 			x++;
 		}
-		processMbeFrame(opts, state, ambe_fr);
+		processAMBEFrame(opts, state, ambe_fr);
         if (opts->errorbars == 1) {
             printf ("%s", state->err_str);
         }

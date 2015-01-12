@@ -17,7 +17,7 @@
 
 #include "dsd.h"
 
-static void Shellsort_int(int *in, unsigned int n)
+void Shellsort_int(int *in, unsigned int n)
 {
   int i, j;
   int v;

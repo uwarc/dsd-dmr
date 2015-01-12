@@ -41,6 +41,28 @@ void saveAmbe2450Data (dsd_opts * opts, dsd_state * state, char *ambe_d)
   write(opts->mbe_out_fd, buf, 8);
 }
 
+void saveImbe4400Data (dsd_opts * opts, dsd_state * state, char *imbe_d)
+{
+  int i, j, k;
+  unsigned char b, buf[12];
+  unsigned char err;
+
+  err = (unsigned char) state->errs2;
+  buf[0] = err;
+
+  k = 0;
+  for (i = 0; i < 11; i++) {
+      b = 0;
+      for (j = 0; j < 8; j++) {
+          b = b << 1;
+          b = b + imbe_d[k];
+          k++;
+      }
+      buf[i+1] = b;
+  }
+  write(opts->mbe_out_fd, buf, 12);
+}
+
 void
 processAudio (dsd_opts * opts, dsd_state * state)
 {
@@ -123,22 +145,54 @@ writeSynthesizedVoice (dsd_opts * opts, dsd_state * state)
 }
 
 void
-processMbeFrame (dsd_opts * opts, dsd_state * state, char ambe_fr[4][24])
+processAMBEFrame (dsd_opts * opts, dsd_state * state, char ambe_fr[4][24])
 {
   char ambe_d[49];
 
   if ((state->synctype == 6) || (state->synctype == 7)) {
-      mbe_processAmbe3600x2400Framef (state->audio_out_temp_buf, &state->errs, &state->errs2, state->err_str, ambe_fr, ambe_d,
-                                      &state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced, opts->uvquality);
+      state->errs2 = mbe_eccAmbe3600x2400C0 (ambe_fr);
+      mbe_demodulateAmbe3600x2400Data (ambe_fr);
+      state->errs2 += mbe_eccAmbe3600x2400Data (ambe_fr, ambe_d);
+      mbe_processAmbe2400Dataf (state->audio_out_temp_buf, &state->errs2, state->err_str, ambe_d,
+                                &state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced, opts->uvquality);
       if (opts->mbe_out_fd != -1) {
           saveAmbe2450Data (opts, state, ambe_d);
       }
   } else {
-      mbe_processAmbe3600x2450Framef (state->audio_out_temp_buf, &state->errs, &state->errs2, state->err_str, ambe_fr, ambe_d,
-                                      &state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced, opts->uvquality);
+      state->errs2 = mbe_eccAmbe3600x2450C0 (ambe_fr);
+      mbe_demodulateAmbe3600x2450Data (ambe_fr);
+      state->errs2 += mbe_eccAmbe3600x2450Data (ambe_fr, ambe_d);
+      mbe_processAmbe2450Dataf (state->audio_out_temp_buf, &state->errs2, state->err_str, ambe_d,
+                                &state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced, opts->uvquality);
       if (opts->mbe_out_fd != -1) {
           saveAmbe2450Data (opts, state, ambe_d);
       }
+  }
+
+  state->debug_audio_errors += state->errs2;
+  processAudio (opts, state);
+  if (opts->wav_out_fd != -1) {
+      writeSynthesizedVoice (opts, state);
+  }
+}
+
+void
+processIMBEFrame (dsd_opts * opts, dsd_state * state, char imbe_fr[8][23])
+{
+  int i;
+  char imbe_d[88];
+
+  for (i = 0; i < 88; i++) {
+      imbe_d[i] = 0;
+  }
+
+  state->errs2 = mbe_eccImbe7200x4400C0 (imbe_fr);
+  mbe_demodulateImbe7200x4400Data (imbe_fr);
+  state->errs2 += mbe_eccImbe7200x4400Data (imbe_fr, imbe_d);
+  mbe_processImbe4400Dataf (state->audio_out_temp_buf, &state->errs2, state->err_str, imbe_d,
+                            &state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced, opts->uvquality);
+  if (opts->mbe_out_fd != -1) {
+      saveImbe4400Data (opts, state, imbe_d);
   }
 
   state->debug_audio_errors += state->errs2;

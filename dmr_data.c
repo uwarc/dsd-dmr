@@ -16,6 +16,7 @@
  */
 
 #include "dsd.h"
+int processBPTC(unsigned char infodata[196], unsigned char payload[97]);
 
 static const char *slottype_to_string[16] = {
       "PI Header    ", // 0000
@@ -175,10 +176,9 @@ static void process_dataheader(unsigned char payload[96])
 {
     // Common elements to all data header types
     unsigned int j = get_uint(payload+4, 4); // j is used as header type
-    unsigned int k = get_uint(payload+16, 24);
-    unsigned int l = get_uint(payload+40, 24);
-    printf("DATA Header: %s: %s:%u SrcRId: %u %c SAP:%u\n", headertypes[j],
-           ((payload[0])?"Grp":"DestRID"), k, l, ((payload[1]) ? 'A' : ' '), get_uint(payload+8, 4));
+    printf("DATA Header: %s: %s:%u SrcRId: %u %c SAP:%u Misc:0x%04x\n", headertypes[j],
+           ((payload[0])?"Grp":"DestRID"), get_uint(payload+16, 24), get_uint(payload+40, 24),
+           ((payload[1]) ? 'A' : ' '), get_uint(payload+8, 4), get_uint(payload+64, 16));
 }
 
 unsigned int processFlco(dsd_state *state, unsigned char payload[97], char flcostr[1024])
@@ -219,6 +219,46 @@ unsigned int processFlco(dsd_state *state, unsigned char payload[97], char flcos
     flcostr[k] = '\0';
   }
   return k;
+}
+
+// rs_mask = 0x96 for Voice Header, 0x99 for TLC.
+static unsigned int check_and_fix_reedsolomon_12_09_04(ReedSolomon *rs, unsigned char payload[97], unsigned char rs_mask)
+{
+  unsigned int i, errorFlag;
+  unsigned char input[255];
+
+  for (i=0; i<rs->nn; i++) {
+    input[i] = 0;
+  }
+
+  for(i = 0; i < 12; i++) {
+    input[i] = ((payload[8*i  ] << 7) |
+                (payload[8*i+1] << 6) |
+                (payload[8*i+2] << 5) |
+                (payload[8*i+3] << 4) |
+                (payload[8*i+4] << 3) |
+                (payload[8*i+5] << 2) |
+                (payload[8*i+6] << 1) |
+                (payload[8*i+7] << 0));
+  }
+  input[ 9] ^= rs_mask;
+  input[10] ^= rs_mask;
+  input[11] ^= rs_mask;
+
+  /* decode recv[] */
+  errorFlag = rs_decode(rs, input);
+
+  for(i = 0; i < 12; i++) {
+    payload[8*i  ] = ((input[i] & 128)? 1 : 0);
+    payload[8*i+1] = ((input[i] &  64)? 1 : 0);
+    payload[8*i+2] = ((input[i] &  32)? 1 : 0);
+    payload[8*i+3] = ((input[i] &  16)? 1 : 0);
+    payload[8*i+4] = ((input[i] &   8)? 1 : 0);
+    payload[8*i+5] = ((input[i] &   4)? 1 : 0);
+    payload[8*i+6] = ((input[i] &   2)? 1 : 0);
+    payload[8*i+7] = ((input[i] &   1)? 1 : 0);
+  }
+  return errorFlag;
 }
 
 void
@@ -328,7 +368,7 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   golay_codeword <<= 2;
   golay_codeword |= getDibit (opts, state);
   golay_codeword >>= 1;
-  mbe_checkGolayBlock(&golay_codeword);
+  Golay23_Correct(&golay_codeword);
   bursttype = (golay_codeword & 0x0f);
 
   if ((bursttype == 8) || (bursttype == 9)) {
@@ -374,7 +414,7 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
               printf("PI Header: %s\n", packetdump);
             } else if ((bursttype == 1) || (bursttype == 2)) {
               unsigned char rs_mask = ((bursttype == 1) ? 0x96 : 0x99);
-              unsigned int nerrs = check_and_fix_reedsolomon_12_09_04(payload, rs_mask);
+              unsigned int nerrs = check_and_fix_reedsolomon_12_09_04(&state.ReedSolomon_12_09_04, payload, rs_mask);
               state->debug_header_errors += nerrs;
               printf("%s: fid: %s (%u) \n", ((bursttype == 1) ? "VOICE Header" : "TLC"), fids[j], fid);
               if ((fid == 0) || (fid == 16)) { // Standard feature, MotoTRBO Capacity+
@@ -393,7 +433,7 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
                 unsigned char nblks = get_uint(payload+24, 8);
                 unsigned int txid = get_uint(payload+32, 24);
                 unsigned int rxid = get_uint(payload+56, 24);
-                printf("Preamble: %u %s blks, %s: 0x%06x RId: 0x%06x\n", nblks,
+                printf("Preamble: %u %s blks, %s: %u RId: %u\n", nblks,
                        ((payload[0] == '1')?"Data":"CSBK"),
                        ((payload[1] == '1') ? "TGrp" : "TGid"),
                        txid, rxid);
