@@ -72,7 +72,7 @@ static inline void initOpts (dsd_opts * opts)
   opts->audio_gain = 0;
   opts->wav_out_fd = -1;
   opts->uvquality = 3;
-  opts->mod_qpsk = 0;
+  //opts->mod_qpsk = 0;
   opts->inverted_dmr = 0;       // most transmitter + scanner + sound card combinations show non-inverted signals for this
   opts->mod_threshold = 26;
   opts->ssize = 36;
