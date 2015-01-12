@@ -37,27 +37,10 @@ processNXDNData (dsd_opts * opts, dsd_state * state)
           printf(" Trunk-D Composite Ch ");
           break;
       }
-      printf ("DATA    ");
+      printf ("DATA    \n");
   }
 
-#ifdef NXDN_DUMP
-  for (i = 0; i < 30; i++) {
-      dibit = getDibit (opts, state);
-      printf ("%c", dibit + 48);
-  }
-  printf (" ");
-
-  for (i = 0; i < 144; i++) {
-      dibit = getDibit (opts, state);
-      printf ("%c", dibit + 48);
-  }
-#else
   skipDibit (opts, state, 174);
-#endif
-
-  if (opts->errorbars == 1) {
-      printf ("\n");
-  }
 }
 
 void
@@ -103,15 +86,7 @@ processNXDNVoice (dsd_opts * opts, dsd_state * state)
     printf ("VOICE e:");
   }
 
-#ifdef NXDN_DUMP
-  for (i = 0; i < 30; i++) {
-    dibit = getDibit (opts, state);
-    printf ("%c", dibit + 48);
-  }
-  printf (" ");
-#else
   skipDibit (opts, state, 30);
-#endif
 
   pr = nxdnpr;
   for (j = 0; j < 4; j++) {
@@ -121,9 +96,6 @@ processNXDNVoice (dsd_opts * opts, dsd_state * state)
     z = nZ;
     for (i = 0; i < 36; i++) { 
       dibit = getDibit (opts, state);
-#ifdef NXDN_DUMP
-      printf ("%c", dibit + 48);
-#endif
       ambe_fr[*w][*x] = *pr ^ (1 & (dibit >> 1));   // bit 1
       pr++;
       ambe_fr[*y][*z] = (1 & dibit);        // bit 0
@@ -132,10 +104,10 @@ processNXDNVoice (dsd_opts * opts, dsd_state * state)
       y++;
       z++;
     }
-    processMbeFrame (opts, state, ambe_fr);
-#ifdef NXDN_DUMP
-    printf (" ");
-#endif
+    processAMBEFrame (opts, state, ambe_fr);
+    if (opts->errorbars == 1) {
+      printf ("%s", state->err_str);
+    }
   }
 
   if (opts->errorbars == 1) {

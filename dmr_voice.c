@@ -53,16 +53,14 @@ void
 processDMRvoice (dsd_opts * opts, dsd_state * state)
 {
   // extracts AMBE frames from DMR frame
-  int i, j, k, dibit;
+  int i, j, dibit;
   int *dibit_p;
   char ambe_fr[4][24];
   char ambe_fr2[4][24];
   char ambe_fr3[4][24];
   const int *w, *x, *y, *z;
   char sync[25];
-  unsigned char cachdata[13];
   unsigned char cachbits[25];
-  unsigned char cachbits2[25];
   unsigned char cach_hdr = 0, cach_hdr_hamming = 0;
   int mutecurrentslot;
   int msMode;
