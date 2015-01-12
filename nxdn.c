@@ -6,6 +6,7 @@ processNXDNData (dsd_opts * opts, dsd_state * state)
 {
   int i, dibit;
   int *dibit_p;
+  int level = (int) state->max / 164;
   char lich[9];
   char lich_scram[9] = { 0, 0, 1, 0, 0, 1, 1, 1, 0 };
   dibit_p = state->dibit_buf_p - 8;
@@ -50,6 +51,7 @@ processNXDNVoice (dsd_opts * opts, dsd_state * state)
 {
   int i, j, dibit;
   int *dibit_p;
+  int level = (int) state->max / 164;
   char lich[9];
   char lich_scram[9] = { 0, 0, 1, 0, 0, 1, 1, 1, 0 };
   char ambe_fr[4][24];
