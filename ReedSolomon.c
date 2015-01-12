@@ -57,78 +57,58 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <stdio.h>
-/* RS code over GF(2**mm) */
-#define MM 8
-/* nn=2**mm -1   length of codeword */
-#define NN 255
-/* tt=8 number of errors that can be corrected */
-/* kk=nn-2*tt */
-#define TT 2
-#define KK (NN-4)
-/* distance = nn-kk+1 = 2*tt+1 */
+#include "ReedSolomon.h"
 
-typedef struct _ReedSolomon {
-    int alpha_to[NN + 1];
-    int index_of[NN + 1];
-    int gg[17];
-} ReedSolomon;
-
-static unsigned char generator_polinomial[MM+1] = { 1, 0, 1, 1, 1, 0, 0, 0, 1} ; /* specify irreducible polynomial coeffts */
-// gg: 0x74, 0xe7, 0xd8, 0x1e, 0x01
-// gg: 0x0a, 0x51, 0xfb, 0x4c, 0x00
-ReedSolomon ReedSolomon_12_09_04;
-
-/* generate GF(2**mm) from the irreducible polynomial p(X) in pp[0]..pp[mm] lookup tables:
- * index->polynomial form   alpha_to[] contains j=alpha**i;
+/* 
+ * Generate GF(2**mm) from the irreducible polynomial p(X) in pp[0]..pp[mm] lookup tables:
+ * index->polynomial form alpha_to[] contains j=alpha**i;
  * polynomial form -> index form  index_of[j=alpha**i] = i
  * alpha=2 is the primitive element of GF(2**mm)
- **/
-static void generate_gf(ReedSolomon *rs, unsigned char *generator_polinomial)
+ * Also, obtain the generator polynomial of the tt-error correcting,
+ * length nn=(2**mm -1) Reed Solomon code  from the product of (X+alpha**i), i=1..2*tt
+ */
+void rs_init(ReedSolomon *rs, unsigned char *generator_polinomial, unsigned char mm, unsigned char tt)
 {
-    register int i, mask;
+    register int i, j, mask = 1;
 
-    mask = 1;
-    rs->alpha_to[MM] = 0;
-    for (i = 0; i < MM; i++) {
+    rs->mm = mm;
+    rs->tt = tt;
+    rs->nn = ((1 << mm) - 1);
+    rs->kk = (rs->nn - 2*rs->tt);
+    rs->n = (rs->nn - rs->kk);
+    rs->alpha_to[mm] = 0;
+    for (i = 0; i < mm; i++) {
         rs->alpha_to[i] = mask;
         rs->index_of[rs->alpha_to[i]] = i;
         if (generator_polinomial[i] != 0)
-            rs->alpha_to[MM] ^= mask;
+            rs->alpha_to[mm] ^= mask;
         mask <<= 1;
     }
-    rs->index_of[rs->alpha_to[MM]] = MM;
+    rs->index_of[rs->alpha_to[mm]] = mm;
     mask >>= 1;
-    for (i = MM + 1; i < NN; i++) {
+    for (i = mm + 1; i < rs->nn; i++) {
         if (rs->alpha_to[i - 1] >= mask)
-            rs->alpha_to[i] = rs->alpha_to[MM] ^ ((rs->alpha_to[i - 1] ^ mask) << 1);
+            rs->alpha_to[i] = rs->alpha_to[mm] ^ ((rs->alpha_to[i - 1] ^ mask) << 1);
         else
             rs->alpha_to[i] = rs->alpha_to[i - 1] << 1;
         rs->index_of[rs->alpha_to[i]] = i;
     }
     rs->index_of[0] = -1;
-}
-
-/* Obtain the generator polynomial of the tt-error correcting, length
- nn=(2**mm -1) Reed Solomon code  from the product of (X+alpha**i), i=1..2*tt
- */
-static void gen_poly(ReedSolomon *rs)
-{
-    register int i, j, n = NN - KK;
 
     rs->gg[0] = 2; /* primitive element alpha = 2  for GF(2**mm)  */
     rs->gg[1] = 1; /* g(x) = (X+alpha) initially */
-    for (i = 2; i <= n; i++) {
+    for (i = 2; i <= rs->n; i++) {
         rs->gg[i] = 1;
         for (j = i - 1; j > 0; j--)
             if (rs->gg[j] != 0)
-                rs->gg[j] = rs->gg[j - 1] ^ rs->alpha_to[(rs->index_of[rs->gg[j]] + i) % NN];
+                rs->gg[j] = rs->gg[j - 1] ^ rs->alpha_to[(rs->index_of[rs->gg[j]] + i) % rs->nn];
             else
                 rs->gg[j] = rs->gg[j - 1];
-        rs->gg[0] = rs->alpha_to[(rs->index_of[rs->gg[0]] + i) % NN]; /* gg[0] can never be zero */
+        rs->gg[0] = rs->alpha_to[(rs->index_of[rs->gg[0]] + i) % rs->nn]; /* gg[0] can never be zero */
     }
+
     /* convert gg[] to index form for quicker encoding */
-    for (i = 0; i <= n; i++)
+    for (i = 0; i <= rs->n; i++)
         rs->gg[i] = rs->index_of[rs->gg[i]];
 }
 
@@ -140,19 +120,19 @@ static void gen_poly(ReedSolomon *rs)
  Codeword is   c(X) = data(X)*X**(nn-kk)+ b(X)          */
 void rs_encode(ReedSolomon *rs, const unsigned char *data, unsigned char *bb)
 {
-    register int i, j, n = NN - KK;
+    register int i, j;
     int feedback;
 
-    for (i = 0; i < n; i++)
+    for (i = 0; i < rs->n; i++)
         bb[i] = 0;
-    for (i = KK - 1; i >= 0; i--) {
-        feedback = rs->index_of[data[i] ^ bb[n - 1]];
+    for (i = rs->kk - 1; i >= 0; i--) {
+        feedback = rs->index_of[data[i] ^ bb[rs->n - 1]];
         if (feedback != -1) {
-            for (j = n - 1; j > 0; j--)
-                bb[j] = bb[j - 1] ^ rs->alpha_to[(rs->gg[j] + feedback) % NN];
-            bb[0] = rs->alpha_to[(rs->gg[0] + feedback) % NN];
+            for (j = rs->n - 1; j > 0; j--)
+                bb[j] = bb[j - 1] ^ rs->alpha_to[(rs->gg[j] + feedback) % rs->nn];
+            bb[0] = rs->alpha_to[(rs->gg[0] + feedback) % rs->nn];
         } else {
-            for (j = n - 1; j > 0; j--)
+            for (j = rs->n - 1; j > 0; j--)
                 bb[j] = bb[j - 1];
             bb[0] = 0;
         }
@@ -177,18 +157,22 @@ void rs_encode(ReedSolomon *rs, const unsigned char *data, unsigned char *bb)
  symbols will be okay and that if we are in luck, the errors are in the
  parity part of the transmitted codeword).  Of course, these insoluble cases
  can be returned as error flags to the calling routine if desired.   */
-int rs_decode(ReedSolomon *rs, unsigned char *recd)
+int rs_decode(ReedSolomon *rs, unsigned char *input)
 {
-    register int i, j, u, q, n = NN - KK;
-    int elp[NN - KK + 2][NN - KK], d[NN - KK + 2], l[NN - KK + 2], u_lu[NN - KK + 2], s[NN - KK + 1];
-    int count = 0, syn_error = 0, root[TT], loc[TT], z[TT + 1], err[NN], reg[TT + 1];
+    register int i, j, u, q;
+    unsigned char recd[MAX_NN];
+    int elp[MAX_NN + 2][MAX_NN], d[MAX_NN + 2], l[MAX_NN + 2], u_lu[MAX_NN + 2], s[MAX_NN + 1];
+    int count = 0, syn_error = 0, root[MAX_TT], loc[MAX_TT], z[MAX_TT + 1], err[MAX_NN], reg[MAX_TT + 1];
     int irrecoverable_error = 0;
 
+    for (i = 0; i < rs->nn; i++)
+       recd[i] = rs->index_of[input[i]]; /* put recd[i] into index form (ie as powers of alpha) */
+
     /* first form the syndromes */
-    for (i = 1; i <= n; i++) {
+    for (i = 1; i <= rs->n; i++) {
         s[i] = 0;
-        for (j = 0; j < NN; j++)
-            s[i] ^= rs->alpha_to[(recd[j] + i * j) % NN]; /* recd[j] in index form */
+        for (j = 0; j < rs->nn; j++)
+            s[i] ^= rs->alpha_to[(recd[j] + i * j) % rs->nn]; /* recd[j] in index form */
         /* convert syndrome from polynomial form to index form  */
         if (s[i] != 0)
             syn_error++; /* set flag if non-zero syndrome => error */
@@ -209,7 +193,7 @@ int rs_decode(ReedSolomon *rs, unsigned char *recd)
         d[1] = s[1]; /* index form */
         elp[0][0] = 0; /* index form */
         elp[1][0] = 1; /* polynomial form */
-        for (i = 1; i < n; i++) {
+        for (i = 1; i < rs->n; i++) {
             elp[0][i] = -1; /* index form */
             elp[1][i] = 0; /* polynomial form */
         }
@@ -251,11 +235,11 @@ int rs_decode(ReedSolomon *rs, unsigned char *recd)
                     l[u + 1] = l[q] + u - q;
 
                 /* form new elp(x) */
-                for (i = 0; i < n; i++)
+                for (i = 0; i < rs->n; i++)
                     elp[u + 1][i] = 0;
                 for (i = 0; i <= l[q]; i++)
                     if (elp[q][i] != -1)
-                        elp[u + 1][i + u - q] = rs->alpha_to[(d[u] + NN - d[q] + elp[q][i]) % NN];
+                        elp[u + 1][i + u - q] = rs->alpha_to[(d[u] + rs->nn - d[q] + elp[q][i]) % rs->nn];
                 for (i = 0; i <= l[u]; i++) {
                     elp[u + 1][i] ^= elp[u][i];
                     elp[u][i] = rs->index_of[elp[u][i]]; /*convert old elp value to index*/
@@ -264,7 +248,7 @@ int rs_decode(ReedSolomon *rs, unsigned char *recd)
             u_lu[u + 1] = u - l[u + 1];
 
             /* form (u+1)th discrepancy */
-            if (u < n) /* no discrepancy computed on last iteration */
+            if (u < rs->nn) /* no discrepancy computed on last iteration */
             {
                 if (s[u + 1] != -1)
                     d[u + 1] = rs->alpha_to[s[u + 1]];
@@ -273,13 +257,13 @@ int rs_decode(ReedSolomon *rs, unsigned char *recd)
                 for (i = 1; i <= l[u + 1]; i++)
                     if ((s[u + 1 - i] != -1) && (elp[u + 1][i] != 0))
                         d[u + 1] ^= rs->alpha_to[(s[u + 1 - i]
-                                  + rs->index_of[elp[u + 1][i]]) % NN];
+                                  + rs->index_of[elp[u + 1][i]]) % rs->nn];
                 d[u + 1] = rs->index_of[d[u + 1]]; /* put d[u+1] into index form */
             }
-        } while ((u < n) && (l[u + 1] <= TT));
+        } while ((u < rs->n) && (l[u + 1] <= rs->tt));
 
         u++;
-        if (l[u] <= TT) /* can correct error */
+        if (l[u] <= rs->tt) /* can correct error */
         {
             /* put elp into index form */
             for (i = 0; i <= l[u]; i++)
@@ -289,17 +273,17 @@ int rs_decode(ReedSolomon *rs, unsigned char *recd)
             for (i = 1; i <= l[u]; i++)
                 reg[i] = elp[u][i];
             count = 0;
-            for (i = 1; i <= NN; i++) {
+            for (i = 1; i <= rs->nn; i++) {
                 q = 1;
                 for (j = 1; j <= l[u]; j++)
                     if (reg[j] != -1) {
-                        reg[j] = (reg[j] + j) % NN;
+                        reg[j] = (reg[j] + j) % rs->nn;
                         q ^= rs->alpha_to[reg[j]];
                     };
                 if (!q) /* store root and error location number indices */
                 {
                     root[count] = i;
-                    loc[count] = NN - i;
+                    loc[count] = rs->nn - i;
                     count++;
                 };
             };
@@ -319,31 +303,31 @@ int rs_decode(ReedSolomon *rs, unsigned char *recd)
                         z[i] = 0;
                     for (j = 1; j < i; j++)
                         if ((s[j] != -1) && (elp[u][i - j] != -1))
-                            z[i] ^= rs->alpha_to[(elp[u][i - j] + s[j]) % NN];
+                            z[i] ^= rs->alpha_to[(elp[u][i - j] + s[j]) % rs->nn];
                     z[i] = rs->index_of[z[i]]; /* put into index form */
                 };
 
                 /* evaluate errors at locations given by error location numbers loc[i] */
-                for (i = 0; i < NN; i++) {
+                for (i = 0; i < rs->nn; i++) {
                     err[i] = 0;
                     /* convert recd[] to polynomial form */
-                    recd[i] = rs->alpha_to[recd[i]];
+                    input[i] = rs->alpha_to[recd[i]];
                 }
                 for (i = 0; i < l[u]; i++) /* compute numerator of error term first */
                 {
                     err[loc[i]] = 1; /* accounts for z[0] */
                     for (j = 1; j <= l[u]; j++)
                         if (z[j] != -1)
-                            err[loc[i]] ^= rs->alpha_to[(z[j] + j * root[i]) % NN];
+                            err[loc[i]] ^= rs->alpha_to[(z[j] + j * root[i]) % rs->nn];
                     if (err[loc[i]] != 0) {
                         err[loc[i]] = rs->index_of[err[loc[i]]];
                         q = 0; /* form denominator of error term */
                         for (j = 0; j < l[u]; j++)
                             if (j != i)
-                                q += rs->index_of[1 ^ rs->alpha_to[(loc[j] + root[i]) % NN]];
-                        q = q % NN;
-                        err[loc[i]] = rs->alpha_to[(err[loc[i]] - q + NN) % NN];
-                        recd[loc[i]] ^= err[loc[i]]; /*recd[i] must be in polynomial form */
+                                q += rs->index_of[1 ^ rs->alpha_to[(loc[j] + root[i]) % rs->nn]];
+                        q = q % rs->nn;
+                        err[loc[i]] = rs->alpha_to[(err[loc[i]] - q + rs->nn) % rs->nn];
+                        input[loc[i]] ^= err[loc[i]]; /*input[i] must be in polynomial form */
                     }
                 }
             } else {
@@ -354,69 +338,19 @@ int rs_decode(ReedSolomon *rs, unsigned char *recd)
             /* elp has degree >tt hence cannot solve */
             irrecoverable_error = 2;
         }
-
     } else {
         /* no non-zero syndromes => no errors: output received codeword */
-        for (i = 0; i < NN; i++)
+        for (i = 0; i < rs->nn; i++)
             /* convert recd[] to polynomial form */
-            recd[i] = rs->alpha_to[recd[i]];
+            input[i] = rs->alpha_to[recd[i]];
     }
 
     if (irrecoverable_error) {
-        for (i = 0; i < NN; i++) /* could return error flag if desired */
+        for (i = 0; i < rs->nn; i++) /* could return error flag if desired */
             /* convert recd[] to polynomial form */
-            recd[i] = rs->alpha_to[recd[i]];
+            input[i] = rs->alpha_to[recd[i]];
     }
 
     return irrecoverable_error;
-}
-
-void rs_init(void) {
-    generate_gf(&ReedSolomon_12_09_04, generator_polinomial);
-    gen_poly(&ReedSolomon_12_09_04);
-}
-
-// rs_mask = 0x96 for Voice Header, 0x99 for TLC.
-unsigned int check_and_fix_reedsolomon_12_09_04(unsigned char payload[97], unsigned char rs_mask)
-{
-  unsigned int i, errorFlag;
-  unsigned char input[NN], recd[NN];
-
-  for (i=0; i<NN; i++) {
-    recd[i] = 0;
-    input[i] = 0;
-  }
-
-  for(i = 0; i < 12; i++) {
-    input[i] = ((payload[8*i  ] << 7) |
-                (payload[8*i+1] << 6) |
-                (payload[8*i+2] << 5) |
-                (payload[8*i+3] << 4) |
-                (payload[8*i+4] << 3) |
-                (payload[8*i+5] << 2) |
-                (payload[8*i+6] << 1) |
-                (payload[8*i+7] << 0));
-  }
-  input[ 9] ^= rs_mask;
-  input[10] ^= rs_mask;
-  input[11] ^= rs_mask;
-
-  for (i = 0; i < NN; i++)
-     recd[i] = ReedSolomon_12_09_04.index_of[input[i]]; /* put recd[i] into index form (ie as powers of alpha) */
-
-  /* decode recv[] */
-  errorFlag = rs_decode(&ReedSolomon_12_09_04, recd); /* recd[] is returned in polynomial form */
-
-  for(i = 0; i < 12; i++) {
-    payload[8*i  ] = ((recd[i] & 128)? 1 : 0);
-    payload[8*i+1] = ((recd[i] &  64)? 1 : 0);
-    payload[8*i+2] = ((recd[i] &  32)? 1 : 0);
-    payload[8*i+3] = ((recd[i] &  16)? 1 : 0);
-    payload[8*i+4] = ((recd[i] &   8)? 1 : 0);
-    payload[8*i+5] = ((recd[i] &   4)? 1 : 0);
-    payload[8*i+6] = ((recd[i] &   2)? 1 : 0);
-    payload[8*i+7] = ((recd[i] &   1)? 1 : 0);
-  }
-  return errorFlag;
 }
 
