@@ -30,18 +30,10 @@ void processDSTAR(dsd_opts * opts, dsd_state * state) {
 	// extracts AMBE frames from D-STAR voice frame
 	int i, j, dibit;
 	char ambe_fr[4][24];
-	int framecount;
-	int sync_missed = 0;
+	int total_errs = 0, sync_missed = 0, framecount;
 	unsigned char slowdata[4];
 	unsigned int bitbuffer = 0;
 	const int *w, *x;
-    int level = (int) state->max / 164;
-
-    if (opts->errorbars) {
-        printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  VOICE e:",
-                state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"),
-                level, state->slot0light, state->slot1light);
-    }
 
 	if (state->synctype == 18) {
 		framecount = 0;
@@ -80,9 +72,7 @@ void processDSTAR(dsd_opts * opts, dsd_state * state) {
 			x++;
 		}
 		processAMBEFrame(opts, state, ambe_fr);
-        if (opts->errorbars == 1) {
-            printf ("%s", state->err_str);
-        }
+        total_errs += state->errs2;
 
 		//  data frame - 24 bits
 		for (i = 73; i < 97; i++) {
@@ -129,9 +119,12 @@ void processDSTAR(dsd_opts * opts, dsd_state * state) {
 	}
 
 end:
-    if (opts->errorbars == 1) {
-		printf("\n");
-	}
+    if (opts->errorbars) {
+        int level = (int) state->max / 164;
+        printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  VOICE e: %u\n",
+                state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"),
+                level, state->slot0light, state->slot1light, total_errs);
+    }
 }
 
 #define SCRAMBLER_TABLE_BITS_LENGTH 720

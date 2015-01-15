@@ -6,7 +6,6 @@ processNXDNData (dsd_opts * opts, dsd_state * state)
 {
   int i, dibit;
   int *dibit_p;
-  int level = (int) state->max / 164;
   char lich[9];
   char lich_scram[9] = { 0, 0, 1, 0, 0, 1, 1, 1, 0 };
   dibit_p = state->dibit_buf_p - 8;
@@ -20,6 +19,7 @@ processNXDNData (dsd_opts * opts, dsd_state * state)
   }
 
   if (opts->errorbars) {
+      int level = (int) state->max / 164;
       printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  DATA: ",
               state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"),
               level, state->slot0light, state->slot1light);
@@ -50,16 +50,10 @@ void
 processNXDNVoice (dsd_opts * opts, dsd_state * state)
 {
   int i, j, dibit;
-  int level = (int) state->max / 164;
+  unsigned int total_errs = 0;
   char ambe_fr[4][24];
   const int *w, *x, *y, *z;
   const char *pr;
-
-  if (opts->errorbars) {
-    printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  VOICE e:",
-            state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"),
-            level, state->slot0light, state->slot1light);
-  }
 
   skipDibit (opts, state, 30);
 
@@ -80,13 +74,14 @@ processNXDNVoice (dsd_opts * opts, dsd_state * state)
       z++;
     }
     processAMBEFrame (opts, state, ambe_fr);
-    if (opts->errorbars == 1) {
-      printf ("%s", state->err_str);
-    }
+    total_errs += state->errs2;
   }
 
-  if (opts->errorbars == 1) {
-    printf ("\n");
+  if (opts->errorbars) {
+    int level = (int) state->max / 164;
+    printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  VOICE e: %u\n",
+            state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"),
+            level, state->slot0light, state->slot1light, total_errs);
   }
 }
 
