@@ -55,18 +55,16 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
   // extracts AMBE frames from DMR frame
   int i, j, dibit;
   int *dibit_p;
+  unsigned int total_errs = 0;
   char ambe_fr[4][24];
   char ambe_fr2[4][24];
   char ambe_fr3[4][24];
-  const int *w, *x, *y, *z;
   char sync[25];
+  unsigned char syncdata[16];
   unsigned char cachbits[25];
   unsigned char cach_hdr = 0, cach_hdr_hamming = 0;
-  int mutecurrentslot;
-  int msMode;
-
-  mutecurrentslot = 0;
-  msMode = 0;
+  int mutecurrentslot = 0;
+  unsigned char msMode = 0;
 
   dibit_p = state->dibit_buf_p - 144;
   for (j = 0; j < 6; j++) {
@@ -111,10 +109,6 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
       }
 
       // current slot frame 1
-      w = rW;
-      x = rX;
-      y = rY;
-      z = rZ;
       for (i = 0; i < 36; i++) {
           if (j > 0) {
               dibit = getDibit (opts, state);
@@ -123,19 +117,11 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
               if (opts->inverted_dmr == 1)
                   dibit = (dibit ^ 2);
           }
-          ambe_fr[*w][*x] = (1 & (dibit >> 1)); // bit 1
-          ambe_fr[*y][*z] = (1 & dibit);        // bit 0
-          w++;
-          x++;
-          y++;
-          z++;
+          ambe_fr[rW[i]][rX[i]] = (1 & (dibit >> 1)); // bit 1
+          ambe_fr[rY[i]][rZ[i]] = (1 & dibit);        // bit 0
       }
 
       // current slot frame 2 first half
-      w = rW;
-      x = rX;
-      y = rY;
-      z = rZ;
       for (i = 0; i < 18; i++) {
           if (j > 0) {
               dibit = getDibit (opts, state);
@@ -144,69 +130,75 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
               if (opts->inverted_dmr == 1)
                   dibit = (dibit ^ 2);
           }
-          ambe_fr2[*w][*x] = (1 & (dibit >> 1));        // bit 1
-          ambe_fr2[*y][*z] = (1 & dibit);       // bit 0
-          w++;
-          x++;
-          y++;
-          z++;
+          ambe_fr2[rW[i]][rX[i]] = (1 & (dibit >> 1));        // bit 1
+          ambe_fr2[rY[i]][rZ[i]] = (1 & dibit);       // bit 0
       }
 
       // signaling data or sync
-      for (i = 0; i < 24; i++) {
-          if (j > 0) {
+      if (j > 0) {
+          unsigned char lcss;
+          unsigned int emb_field = 0;
+          for (i = 0; i < 4; i++) {
               dibit = getDibit (opts, state);
-          } else {
+              sync[i] = (dibit | 1) + 48;
+              emb_field <<= 2;
+              emb_field |= dibit;
+          }
+          for (i = 0; i < 16; i++) {
+              dibit = getDibit (opts, state);
+              sync[i+4] = (dibit | 1) + 48;
+              syncdata[i] = dibit;
+          }
+          for (i = 20; i < 24; i++) {
+              dibit = getDibit (opts, state);
+              sync[i] = (dibit | 1) + 48;
+              emb_field <<= 2;
+              emb_field |= dibit;
+          }
+          // Non-Sync part of the superframe
+#if 0
+          if (!doQR1676(&emb_field)) {
+#endif
+              lcss = ((emb_field >> 10) & 3);
+              processEmb (state, lcss, syncdata);
+#if 0
+          }
+#endif
+      } else { 
+          for (i = 0; i < 24; i++) {
               dibit = *dibit_p++;
               if (opts->inverted_dmr == 1)
                   dibit = (dibit ^ 2);
+              sync[i] = (dibit | 1) + 48;
           }
-          sync[i] = (dibit | 1) + 48;
       }
       sync[24] = 0;
 
       if ((strcmp (sync, DMR_BS_DATA_SYNC) == 0) || (strcmp (sync, DMR_MS_DATA_SYNC) == 0)) {
           mutecurrentslot = 1;
-          if (state->currentslot == 0)
-            {
+          if (state->currentslot == 0) {
               strcpy (state->slot0light, "[slot0]");
-            }
-          else
-            {
+          } else {
               strcpy (state->slot1light, "[slot1]");
-            }
+          }
       } else if ((strcmp (sync, DMR_BS_VOICE_SYNC) == 0) || (strcmp (sync, DMR_MS_VOICE_SYNC) == 0)) {
           mutecurrentslot = 0;
-          if (state->currentslot == 0)
-            {
+          if (state->currentslot == 0) {
               strcpy (state->slot0light, "[SLOT0]");
-            }
-          else
-            {
+          } else {
               strcpy (state->slot1light, "[SLOT1]");
-            }
+          }
       }
 
       if ((strcmp (sync, DMR_MS_VOICE_SYNC) == 0) || (strcmp (sync, DMR_MS_DATA_SYNC) == 0)) {
           msMode = 1;
       }
 
-      if ((j == 0) && (opts->errorbars == 1)) {
-          int level = (int) state->max / 164;
-          printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  VOICE e:",
-                  state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"), level,
-                  state->slot0light, state->slot1light);
-      }
-
       // current slot frame 2 second half
       for (i = 0; i < 18; i++) {
           dibit = getDibit (opts, state);
-          ambe_fr2[*w][*x] = (1 & (dibit >> 1));        // bit 1
-          ambe_fr2[*y][*z] = (1 & dibit);       // bit 0
-          w++;
-          x++;
-          y++;
-          z++;
+          ambe_fr2[rW[i+18]][rX[i+18]] = (1 & (dibit >> 1));        // bit 1
+          ambe_fr2[rY[i+18]][rZ[i+18]] = (1 & dibit);       // bit 0
       }
 
       if (mutecurrentslot == 0) {
@@ -214,36 +206,29 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
               state->firstframe = 0;
           } else {
               processAMBEFrame (opts, state, ambe_fr);
-              if (opts->errorbars == 1) {
-                printf ("%s", state->err_str);
-              }
+              total_errs += state->errs2;
               processAMBEFrame (opts, state, ambe_fr2);
-              if (opts->errorbars == 1) {
-                printf ("%s", state->err_str);
-              }
+              total_errs += state->errs2;
           }
       }
 
       // current slot frame 3
-      w = rW;
-      x = rX;
-      y = rY;
-      z = rZ;
       for (i = 0; i < 36; i++) {
           dibit = getDibit (opts, state);
-          ambe_fr3[*w][*x] = (1 & (dibit >> 1));        // bit 1
-          ambe_fr3[*y][*z] = (1 & dibit);       // bit 0
-          w++;
-          x++;
-          y++;
-          z++;
+          ambe_fr3[rW[i]][rX[i]] = (1 & (dibit >> 1));        // bit 1
+          ambe_fr3[rY[i]][rZ[i]] = (1 & dibit);       // bit 0
       }
 
       if (mutecurrentslot == 0) {
           processAMBEFrame (opts, state, ambe_fr3);
-          if (opts->errorbars == 1) {
-            printf ("%s", state->err_str);
-          }
+          total_errs += state->errs2;
+      }
+
+      if ((j == 0) && (opts->errorbars == 1)) {
+          int level = (int) state->max / 164;
+          printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  VOICE e: %u\n",
+                  state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"), level,
+                  state->slot0light, state->slot1light, total_errs);
       }
 
       // CACH
@@ -267,23 +252,17 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
       sync[24] = 0;
 
       if ((strcmp (sync, DMR_BS_DATA_SYNC) == 0) || (msMode == 1)) {
-          if (state->currentslot == 0)
-            {
+          if (state->currentslot == 0) {
               strcpy (state->slot1light, " slot1 ");
-            }
-          else
-            {
+          } else {
               strcpy (state->slot0light, " slot0 ");
-            }
+          }
       } else if (strcmp (sync, DMR_BS_VOICE_SYNC) == 0) {
-          if (state->currentslot == 0)
-            {
+          if (state->currentslot == 0) {
               strcpy (state->slot1light, " SLOT1 ");
-            }
-          else
-            {
+          } else {
               strcpy (state->slot0light, " SLOT0 ");
-            }
+          }
       }
 
       if (j == 5) {
@@ -296,10 +275,6 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
           // first half current slot
           skipDibit (opts, state, 54);
       }
-  }
-
-  if (opts->errorbars == 1) {
-      printf ("\n");
   }
 }
 
