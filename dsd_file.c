@@ -144,60 +144,120 @@ writeSynthesizedVoice (dsd_opts * opts, dsd_state * state)
   write(opts->wav_out_fd, aout_buf, 160 * sizeof(int16_t));
 }
 
+void demodAmbe3600x24x0Data (int *errs2, char ambe_fr[4][24], char *ambe_d)
+{
+  int i, j, k;
+  unsigned int block = 0, c0_gout = 0, gout = 0, errs = 0;
+  unsigned short pr[115], foo;
+  char *ambe = ambe_d;
+
+  for (j = 22; j >= 0; j--) {
+      block <<= 1;
+      block |= ambe_fr[0][j+1];
+  }
+
+  Golay23_Correct (&block);
+  c0_gout = block;
+
+  block >>= 11;
+  block ^= c0_gout;
+  for (j = 0; j < 12; j++) {
+      if ((block >> j) & 1) {
+          errs++;
+      }
+  }
+
+  // create pseudo-random modulator
+  foo = c0_gout;
+  pr[0] = (16 * foo);
+  for (i = 1; i < 24; i++) {
+      pr[i] = (173 * pr[i - 1]) + 13849 - (65536 * (((173 * pr[i - 1]) + 13849) >> 16));
+  }
+  for (i = 1; i < 24; i++) {
+      pr[i] >>= 15;
+  }
+
+  // just copy C0
+  for (j = 11; j >= 0; j--) {
+      *ambe++ = ((c0_gout >> j) & 1);
+  }
+
+  // demodulate C1 with pr
+  // then, ecc and copy C1
+  k = 1;
+  for (i = 22; i >= 0; i--) {
+      block <<= 1;
+      block |= (ambe_fr[1][i] ^ pr[k++]);
+  }
+
+  Golay23_Correct (&block);
+  gout = block;
+
+  block >>= 11;
+  block ^= gout;
+  for (j = 0; j < 12; j++) {
+      if ((block >> j) & 1) {
+          errs++;
+      }
+  }
+
+  for (j = 11; j >= 0; j--) {
+      *ambe++ = ((gout >> j) & 1);
+  }
+
+  // just copy C2
+  for (j = 10; j >= 0; j--) {
+      *ambe++ = ambe_fr[2][j];
+  }
+
+  // just copy C3
+  for (j = 13; j >= 0; j--) {
+      *ambe++ = ambe_fr[3][j];
+  }
+
+  *errs2 = errs;
+}
+
 void
 processAMBEFrame (dsd_opts * opts, dsd_state * state, char ambe_fr[4][24])
 {
   char ambe_d[49];
 
-  if ((state->synctype == 6) || (state->synctype == 7)) {
-      state->errs2 = mbe_eccAmbe3600x2400C0 (ambe_fr);
-      mbe_demodulateAmbe3600x2400Data (ambe_fr);
-      state->errs2 += mbe_eccAmbe3600x2400Data (ambe_fr, ambe_d);
-      mbe_processAmbe2400Dataf (state->audio_out_temp_buf, &state->errs2, state->err_str, ambe_d,
-                                &state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced, opts->uvquality);
-      if (opts->mbe_out_fd != -1) {
-          saveAmbe2450Data (opts, state, ambe_d);
-      }
-  } else {
-      state->errs2 = mbe_eccAmbe3600x2450C0 (ambe_fr);
-      mbe_demodulateAmbe3600x2450Data (ambe_fr);
-      state->errs2 += mbe_eccAmbe3600x2450Data (ambe_fr, ambe_d);
-      mbe_processAmbe2450Dataf (state->audio_out_temp_buf, &state->errs2, state->err_str, ambe_d,
-                                &state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced, opts->uvquality);
-      if (opts->mbe_out_fd != -1) {
-          saveAmbe2450Data (opts, state, ambe_d);
-      }
+  //state->errs2 = mbe_eccAmbe3600x2450C0 (ambe_fr);
+  //mbe_demodulateAmbe3600x2450Data (ambe_fr);
+  //state->errs2 += mbe_eccAmbe3600x2450Data (ambe_fr, ambe_d);
+  demodAmbe3600x24x0Data (&state->errs2, ambe_fr, ambe_d);
+  if (opts->mbe_out_fd != -1) {
+      saveAmbe2450Data (opts, state, ambe_d);
   }
-
   state->debug_audio_errors += state->errs2;
-  processAudio (opts, state);
+
   if (opts->wav_out_fd != -1) {
+      if ((state->synctype == 6) || (state->synctype == 7)) {
+          mbe_processAmbe2400Dataf (state->audio_out_temp_buf, &state->errs2, state->err_str, ambe_d,
+                                    &state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced, opts->uvquality);
+      } else {
+          mbe_processAmbe2450Dataf (state->audio_out_temp_buf, &state->errs2, state->err_str, ambe_d,
+                                    &state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced, opts->uvquality);
+      }
+
+      processAudio (opts, state);
       writeSynthesizedVoice (opts, state);
   }
 }
 
 void
-processIMBEFrame (dsd_opts * opts, dsd_state * state, char imbe_fr[8][23])
+processIMBEFrame (dsd_opts * opts, dsd_state * state, char imbe_d[88])
 {
-  int i;
-  char imbe_d[88];
-
-  for (i = 0; i < 88; i++) {
-      imbe_d[i] = 0;
-  }
-
-  state->errs2 = mbe_eccImbe7200x4400C0 (imbe_fr);
-  mbe_demodulateImbe7200x4400Data (imbe_fr);
-  state->errs2 += mbe_eccImbe7200x4400Data (imbe_fr, imbe_d);
-  mbe_processImbe4400Dataf (state->audio_out_temp_buf, &state->errs2, state->err_str, imbe_d,
-                            &state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced, opts->uvquality);
   if (opts->mbe_out_fd != -1) {
       saveImbe4400Data (opts, state, imbe_d);
   }
-
   state->debug_audio_errors += state->errs2;
-  processAudio (opts, state);
+
   if (opts->wav_out_fd != -1) {
+      mbe_processImbe4400Dataf (state->audio_out_temp_buf, &state->errs2, state->err_str, imbe_d,
+                                &state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced, opts->uvquality);
+      processAudio (opts, state);
       writeSynthesizedVoice (opts, state);
   }
 }
@@ -205,7 +265,8 @@ processIMBEFrame (dsd_opts * opts, dsd_state * state, char imbe_fr[8][23])
 void
 closeMbeOutFile (dsd_opts * opts, dsd_state * state)
 {
-  char newfilename[64], new_path[1024];
+  unsigned int is_imbe = !(state->synctype & ~1U); // Write IMBE magic if synctype == 0 or 1
+  char new_path[1024];
   time_t tv_sec;
   struct tm timep;
   int result;
@@ -216,10 +277,9 @@ closeMbeOutFile (dsd_opts * opts, dsd_state * state)
       close(opts->mbe_out_fd);
       opts->mbe_out_fd = -1;
       gmtime_r(&tv_sec, &timep);
-      sprintf (newfilename, "nac0-%04u-%02u-%02u-%02u:%02u:%02u-tg%u-src%u.amb",
-               timep.tm_year + 1900, timep.tm_mon + 1, timep.tm_mday,
-               timep.tm_hour, timep.tm_min, timep.tm_sec, state->talkgroup, state->radio_id);
-      sprintf (new_path, "%s%s", opts->mbe_out_dir, newfilename);
+      snprintf (new_path, 1023, "%s/nac0-%04u-%02u-%02u-%02u:%02u:%02u-tg%u-src%u.%cmb", opts->mbe_out_dir,
+                timep.tm_year + 1900, timep.tm_mon + 1, timep.tm_mday,
+                timep.tm_hour, timep.tm_min, timep.tm_sec, state->talkgroup, state->radio_id, (is_imbe ? 'i' : 'a'));
       result = rename (opts->mbe_out_path, new_path);
   }
 }
@@ -228,10 +288,11 @@ void
 openMbeOutFile (dsd_opts * opts, dsd_state * state)
 {
   struct timeval tv;
+  unsigned int is_imbe = !(state->synctype & ~1U); // Write IMBE magic if synctype == 0 or 1
 
   gettimeofday (&tv, NULL);
   opts->mbe_out_last_timeval = tv.tv_sec;
-  sprintf(opts->mbe_out_path, "%s%ld.amb", opts->mbe_out_dir, tv.tv_sec);
+  snprintf (opts->mbe_out_path, 1023, "%s/%ld.%cmb", opts->mbe_out_dir, tv.tv_sec, (is_imbe ? 'i' : 'a'));
 
   if ((opts->mbe_out_fd = open (opts->mbe_out_path, O_WRONLY | O_CREAT, 0644)) < 0) {
       printf ("Error, couldn't open %s\n", opts->mbe_out_path);
@@ -239,7 +300,11 @@ openMbeOutFile (dsd_opts * opts, dsd_state * state)
   }
 
   // write magic
-  write (opts->mbe_out_fd, ".amb", 4);
+  if ((state->synctype == 0) || (state->synctype == 1)) {
+      write (opts->mbe_out_fd, ".imb", 4);
+  } else {
+      write (opts->mbe_out_fd, ".amb", 4);
+  }
 }
 
 static const unsigned char static_hdr_portion[20] = {
