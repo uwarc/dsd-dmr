@@ -155,6 +155,7 @@ processFrame (dsd_opts * opts, dsd_state * state)
   } else {
       unsigned char duid = get_p25_nac_and_duid(opts, state);
       printf("p25 NAC: 0x%03x, DUID: 0x%x\n", state->nac, duid);
+      process_p25_frame (opts, state, duid);
       return;
   }
 }
