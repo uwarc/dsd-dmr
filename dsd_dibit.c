@@ -103,9 +103,49 @@ getDibit (dsd_opts* opts, dsd_state* state)
 
   state->sbuf[state->sidx] = symbol;
 
+#if 0
+  // continuous update of min/max in rf_mod=1 (QPSK) mode
   // in c4fm min/max must only be updated during sync
-  state->maxref = state->max;
-  state->minref = state->min;
+  if (state->rf_mod == 1) {
+    int sbuf2[128];
+    int i, lmin, lmax, lsum = 0;
+
+    for (i = 0; i < opts->ssize; i++) {
+      sbuf2[i] = state->sbuf[i];
+    }
+    Shellsort_int(sbuf2, opts->ssize);
+
+    lmin = (sbuf2[0] + sbuf2[1]) / 2;
+    lmax = (sbuf2[(opts->ssize - 1)] + sbuf2[(opts->ssize - 2)]) / 2;
+    state->minbuf[state->midx] = lmin;
+    state->maxbuf[state->midx] = lmax;
+    if (state->midx == (opts->msize - 1)) {
+          state->midx = 0;
+    } else {
+          state->midx++;
+    }
+    for (i = 0; i < opts->msize; i++) {
+          lsum += state->minbuf[i];
+    }
+    state->min = lsum / opts->msize;
+    lsum = 0;
+    for (i = 0; i < opts->msize; i++) {
+          lsum += state->maxbuf[i];
+    }
+    state->max = lsum / opts->msize;
+    state->center = ((state->max) + (state->min)) / 2;
+    state->umid = (((state->max) - state->center) * 5 / 8) + state->center;
+    state->lmid = (((state->min) - state->center) * 5 / 8) + state->center;
+    state->maxref = (int)((state->max) * 0.80F);
+    state->minref = (int)((state->min) * 0.80F);
+  } else {
+#endif
+    // in c4fm min/max must only be updated during sync
+    state->maxref = state->max;
+    state->minref = state->min;
+#if 0
+  }
+#endif
 
   // Increase sidx
   if (state->sidx == (opts->ssize - 1)) {
