@@ -1,11 +1,10 @@
 #include <stdint.h>
-#define POLY 0xC75
 
 static const unsigned int golayGenerator[12] = {
   0x63a, 0x31d, 0x7b4, 0x3da, 0x1ed, 0x6cc, 0x366, 0x1b3, 0x6e3, 0x54b, 0x49f, 0x475
 };
 
-static const unsigned int golayMatrix[2048] = {
+static const unsigned short golayMatrix[2048] = {
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 72, 0, 0, 0, 0, 0, 0, 0, 2084, 0, 0, 0, 769, 0, 1024, 144,
   2, 0, 0, 0, 0, 0, 0, 0, 72, 0, 0, 0, 72, 0, 72, 72, 72, 0, 0, 0, 16, 0, 1, 1538, 384, 0, 134, 2048, 1056, 288,
   2576, 5, 72, 0, 0, 0, 0, 0, 0, 0, 1280, 0, 0, 0, 4, 0, 546, 144, 2049, 0, 0, 0, 66, 0, 1, 144, 520, 0, 2056, 144,
@@ -79,23 +78,20 @@ static const unsigned int golayMatrix[2048] = {
 
 void Golay23_Correct(unsigned int *block)
 {
-  static unsigned int i, syndrome, eccexpected, eccbits, databits;
+  unsigned int i, syndrome;
   unsigned int mask, block_l = *block;
 
   mask = 0x400000l;
-  eccexpected = 0;
+  syndrome = 0;
   for (i = 0; i < 12; i++) {
-      if ((block_l & mask) != 0l) {
-          eccexpected ^= golayGenerator[i];
+      if ((block_l & mask) != 0) {
+          syndrome ^= golayGenerator[i];
       }
       mask = mask >> 1;
   }
 
-  eccbits =  (block_l & 0x7ffl);
-  syndrome = eccexpected ^ eccbits;
-  databits = (block_l >> 11);
-  databits = databits ^ golayMatrix[syndrome];
-  *block = databits;
+  syndrome ^= (block_l & 0x07ff);
+  *block = ((block_l >> 11) ^ golayMatrix[syndrome]);
 }
 
 /* This function calculates [23,12] Golay codewords.
@@ -107,7 +103,7 @@ unsigned int Golay23_Encode(unsigned int cw)
   c=cw; /* save original codeword */
   for (i=0; i<12; i++){ /* examine each data bit */
       if (cw & 1)        /* test data bit */
-        cw^=POLY;        /* XOR polynomial */
+        cw^=0xC75;        /* XOR polynomial */
       cw>>=1;            /* shift intermediate result */
   }
   return((cw<<12)|c);    /* assemble codeword */
