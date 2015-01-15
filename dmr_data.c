@@ -16,7 +16,6 @@
  */
 
 #include "dsd.h"
-int processBPTC(unsigned char infodata[196], unsigned char payload[97]);
 
 static const char *slottype_to_string[16] = {
       "PI Header    ", // 0000
@@ -143,15 +142,31 @@ static unsigned char hamming7_4_correct(unsigned char value)
     return c;
 }
 
-static unsigned int
-get_uint(unsigned char *payload, unsigned int bits)
+// Hamming (15, 11, 3)
+static unsigned int Hamming15113Gen[11] = {
+    0x4009, 0x200d, 0x100f, 0x080e, 0x0407, 0x020a, 0x0105, 0x008b, 0x004c, 0x0026, 0x0013
+};
+
+static unsigned int Hamming15113Table[16] = {
+    0x0000, 0x0001, 0x0002, 0x0013, 0x0004, 0x0105, 0x0026, 0x0407,
+    0x0008, 0x4009, 0x020A, 0x008b, 0x004C, 0x200D, 0x080E, 0x100F
+};
+
+void Hamming15_11_3_Correct(unsigned int *block)
 {
-    unsigned int i, v = 0;
-    for(i = 0; i < bits; i++) {
-        v <<= 1;
-        v |= payload[i];
+    unsigned int i, codeword = *block, ecc = 0, syndrome;
+    for(i = 0; i < 11; i++) {
+        if((codeword & Hamming15113Gen[i]) > 0xf)
+            ecc ^= Hamming15113Gen[i];
     }
-    return v;
+    syndrome = ecc ^ codeword;
+
+    if (syndrome != 0) {
+      codeword ^= Hamming15113Table[syndrome & 0x0f];
+    }
+
+    *block = codeword;
+    //*block = (codeword >> 4);
 }
 
 static void hexdump_packet(unsigned char payload[96], unsigned char packetdump[31])
@@ -221,45 +236,181 @@ unsigned int processFlco(dsd_state *state, unsigned char payload[97], char flcos
   return k;
 }
 
+// deinterleaved_data[a] = rawdata[(a*181)%196];
+static void processBPTC(unsigned char infodata[196], unsigned char payload[97])
+{
+  unsigned int i, j, k;
+  unsigned char data_fr[196];
+  for(i = 1; i < 197; i++) {
+    data_fr[i-1] = infodata[((i*181)%196)];
+  }
+
+  for (i = 0; i < 3; i++)
+     data_fr[0 * 15 + i] = 0; // Zero reserved bits
+  for (i = 0; i < 15; i++) {
+    unsigned int codeword = 0;
+    for(j = 0; j < 13; j++) {
+      codeword <<= 1;
+      codeword |= data_fr[j * 15 + i];
+    }
+    Hamming15_11_3_Correct(&codeword);
+    codeword &= 0x1fff;
+    for (j = 0; j < 13; j++) {
+      data_fr[j * 15 + i] = ((codeword >> (12 - j)) & 1);
+    }
+  }
+  for (j = 0; j < 9; j++) {
+    unsigned int codeword = 0;
+    for (i = 0; i < 15; i++) {
+        codeword <<= 1;
+        codeword |= data_fr[j * 15 + i];
+    }
+    Hamming15_11_3_Correct(&codeword);
+    codeword >>= 4;
+    for (i = 0; i < 11; i++) {
+        data_fr[j * 15 + 10 - i] = ((codeword >> i) & 1);
+    }
+  }
+  for (i = 3, k = 0; i < 11; i++, k++) {
+     payload[k] = data_fr[0 * 15 + i];
+  }
+  for (j = 1; j < 9; j++) {
+    for (i = 0; i < 11; i++, k++) {
+      payload[k] = data_fr[j * 15 + i];
+    }
+  }
+}
+
+static unsigned char emb_fr[4][32];
+static unsigned int emb_fr_index = 0;
+static unsigned int emb_fr_valid = 0;
+
+void AssembleEmb (dsd_state *state, unsigned char lcss, unsigned char syncdata[16], unsigned int emb_deinv_fr[8])
+{
+  int i, k, dibit;
+
+  switch(lcss) {
+    case 0: //Single fragment LC or first fragment CSBK signalling (used for Reverse Channel)
+      return;
+      break;
+    case 1: // First Fragment of LC signaling
+      emb_fr_index = 0;
+      emb_fr_valid = 0;
+      break;
+    case 2: // Last Fragment of LC or CSBK signaling
+      if(++emb_fr_index != 3)
+	    return;
+      break;
+    case 3:
+      if(++emb_fr_index >= 4)
+	    return;
+	  break;
+  }
+  for(i = 0; i < 16; i++) {
+      dibit = syncdata[i+4];
+      emb_fr[emb_fr_index][2*i] = ((dibit >> 1) & 1);
+      emb_fr[emb_fr_index][2*i+1] = (dibit & 1);
+  }
+  emb_fr_valid |= (1 << emb_fr_index);
+  if(emb_fr_valid == 0x0f) {
+      // Deinterleave
+      for (i = 0; i < 8; i++) {
+        emb_deinv_fr[i] = 0;
+      }
+      for (k = 0; k < 15; k++) {
+        for (i = 0; i < 8; i++) {
+          emb_deinv_fr[i] <<= 1;
+	      emb_deinv_fr[i] |= emb_fr[((8*k+i) >> 5)][((8*k+i) & 31)];
+        }
+	  }
+      for(i = 0; i < 8; i++) {
+        unsigned int hamming_codeword = emb_deinv_fr[i];
+        Hamming15_11_3_Correct(&hamming_codeword);
+        emb_deinv_fr[i] = hamming_codeword;
+      }
+  }
+}
+
+void processEmb (dsd_state *state, unsigned char lcss, unsigned char syncdata[16])
+{
+  int i, k;
+  unsigned int emb_deinv_fr[8];
+  unsigned char fid = 0;
+  unsigned char payload[97];
+
+  AssembleEmb(state, lcss, syncdata, emb_deinv_fr);
+  if(emb_fr_valid == 0x0f) {
+      fid  = (((emb_deinv_fr[0] >> 11) & 0x07) << 5);
+      fid |= (((emb_deinv_fr[1] >>  4) & 0x1f) << 0);
+
+      for (i = 0; i < 6; i++) {
+	    payload[5-i+2] = ((emb_deinv_fr[0] >> (6+i)) & 0x01);
+	  }
+
+      for (i = 0; i < 8; i++) {
+        payload[i+8] = ((fid >> (7-i)) & 1);
+      }
+
+      for (i = 0; i < 6; i++) {
+	    payload[5-i+16] = ((emb_deinv_fr[1] >> (9+i)) & 0x01);
+	  }
+      for (i = 0; i < 11; i++) {
+        k = (14 - i);
+	    payload[i+21] = ((emb_deinv_fr[2] >> k) & 0x01);
+	    payload[i+31] = ((emb_deinv_fr[3] >> k) & 0x01);
+	    payload[i+41] = ((emb_deinv_fr[4] >> k) & 0x01);
+	    payload[i+51] = ((emb_deinv_fr[5] >> k) & 0x01);
+	    payload[i+61] = ((emb_deinv_fr[6] >> k) & 0x01);
+	    payload[i+71] = ((emb_deinv_fr[7] >> k) & 0x01);
+	  }
+      if ((fid == 0) || (fid == 16)) { // Standard feature, MotoTRBO Capacity+
+        char flcostr[1024];
+        flcostr[0] = '\0';
+        processFlco(state, payload, flcostr);
+        printf("Embedded Signalling: fid: %s (%u): %s\n", fids[fid_mapping[fid]], fid, flcostr);
+      } else {
+        unsigned char packetdump[81];
+        hexdump_packet(payload, packetdump);
+        printf("Unknown FLCO in embedded signalling: %s\n", packetdump);
+      }
+  }
+}
+
+#ifdef USE_REEDSOLOMON
 // rs_mask = 0x96 for Voice Header, 0x99 for TLC.
 static unsigned int check_and_fix_reedsolomon_12_09_04(ReedSolomon *rs, unsigned char payload[97], unsigned char rs_mask)
 {
   unsigned int i, errorFlag;
   unsigned char input[255];
+  unsigned char output[255];
 
   for (i=0; i<rs->nn; i++) {
     input[i] = 0;
   }
 
   for(i = 0; i < 12; i++) {
-    input[i] = ((payload[8*i  ] << 7) |
-                (payload[8*i+1] << 6) |
-                (payload[8*i+2] << 5) |
-                (payload[8*i+3] << 4) |
-                (payload[8*i+4] << 3) |
-                (payload[8*i+5] << 2) |
-                (payload[8*i+6] << 1) |
-                (payload[8*i+7] << 0));
+    input[i] = get_uint(payload+8*i, 8);
   }
   input[ 9] ^= rs_mask;
   input[10] ^= rs_mask;
   input[11] ^= rs_mask;
 
   /* decode recv[] */
-  errorFlag = rs_decode(rs, input);
+  errorFlag = rs_decode(rs, input, output);
 
   for(i = 0; i < 12; i++) {
-    payload[8*i  ] = ((input[i] & 128)? 1 : 0);
-    payload[8*i+1] = ((input[i] &  64)? 1 : 0);
-    payload[8*i+2] = ((input[i] &  32)? 1 : 0);
-    payload[8*i+3] = ((input[i] &  16)? 1 : 0);
-    payload[8*i+4] = ((input[i] &   8)? 1 : 0);
-    payload[8*i+5] = ((input[i] &   4)? 1 : 0);
-    payload[8*i+6] = ((input[i] &   2)? 1 : 0);
-    payload[8*i+7] = ((input[i] &   1)? 1 : 0);
+    payload[8*i  ] = ((output[i] & 128)? 1 : 0);
+    payload[8*i+1] = ((output[i] &  64)? 1 : 0);
+    payload[8*i+2] = ((output[i] &  32)? 1 : 0);
+    payload[8*i+3] = ((output[i] &  16)? 1 : 0);
+    payload[8*i+4] = ((output[i] &   8)? 1 : 0);
+    payload[8*i+5] = ((output[i] &   4)? 1 : 0);
+    payload[8*i+6] = ((output[i] &   2)? 1 : 0);
+    payload[8*i+7] = ((output[i] &   1)? 1 : 0);
   }
   return errorFlag;
 }
+#endif
 
 void
 processDMRdata (dsd_opts * opts, dsd_state * state)
@@ -276,7 +427,6 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   unsigned int bursttype = 0;
   unsigned char fid = 0;
   unsigned int print_burst = 1;
-  int bptc_ok = -1;
 
   dibit_p = state->dibit_buf_p - 90;
 
@@ -356,7 +506,6 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   }
 
   // repeat of slottype
-  //skipDibit (opts, state, 5);
   golay_codeword <<= 2;
   golay_codeword |= getDibit (opts, state);
   golay_codeword <<= 2;
@@ -390,7 +539,7 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
 
   if ((bursttype == 0) || (bursttype == 1) || (bursttype == 2) || (bursttype == 3) || (bursttype == 6) || (bursttype == 7)) {
     for (i = 0; i < 96; i++) payload[i] = 0;
-    bptc_ok = processBPTC(infodata, payload);
+    processBPTC(infodata, payload);
   }
 
   for (i = 0; i < 8; i++) {
@@ -408,46 +557,44 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
       if (bursttype > 9) {
           printf ("Unknown burst type: %u\n", bursttype);
       } else {
-          if (bptc_ok == 0) {
-            if (bursttype == 0) {
-              hexdump_packet(payload, packetdump);
-              printf("PI Header: %s\n", packetdump);
-            } else if ((bursttype == 1) || (bursttype == 2)) {
-              unsigned char rs_mask = ((bursttype == 1) ? 0x96 : 0x99);
-              unsigned int nerrs = check_and_fix_reedsolomon_12_09_04(&state->ReedSolomon_12_09_04, payload, rs_mask);
-              state->debug_header_errors += nerrs;
-              printf("%s: fid: %s (%u) \n", ((bursttype == 1) ? "VOICE Header" : "TLC"), fids[j], fid);
-              if ((fid == 0) || (fid == 16)) { // Standard feature, MotoTRBO Capacity+
-                char flcostr[1024];
-                flcostr[0] = '\0';
-                processFlco(state, payload, flcostr);
-                printf("%s\n", flcostr);
-              } else {
-                hexdump_packet(payload, packetdump);
-                printf("Unknown FLCO in voice header/TLC: %s\n", packetdump);
-              }
-            } else if (bursttype == 3) {
-              unsigned char csbk_id = get_uint(payload+2, 6);
-              printf("fid: %s (%u) ", fids[j], fid);
-              if (csbk_id == 0x3d) {
-                unsigned char nblks = get_uint(payload+24, 8);
-                unsigned int txid = get_uint(payload+32, 24);
-                unsigned int rxid = get_uint(payload+56, 24);
-                printf("Preamble: %u %s blks, %s: %u RId: %u\n", nblks,
-                       ((payload[0] == '1')?"Data":"CSBK"),
-                       ((payload[1] == '1') ? "TGrp" : "TGid"),
-                       txid, rxid);
-              } else {
-                printf("CSBK: id: 0x%x\n", csbk_id);
-              }
-            } else if (bursttype == 6) {
-              process_dataheader(payload);
-            } else if (bursttype == 7) {
-              hexdump_packet(payload, packetdump);
-              printf("RATE 1/2 DATA: %s\n", packetdump);
+          if (bursttype == 0) {
+            hexdump_packet(payload, packetdump);
+            printf("PI Header: %s\n", packetdump);
+          } else if ((bursttype == 1) || (bursttype == 2)) {
+#ifdef USE_REEDSOLOMON
+            unsigned char rs_mask = ((bursttype == 1) ? 0x96 : 0x99);
+            unsigned int nerrs = check_and_fix_reedsolomon_12_09_04(&state->ReedSolomon_12_09_04, payload, rs_mask);
+            state->debug_header_errors += nerrs;
+#endif
+            printf("%s: fid: %s (%u) \n", ((bursttype == 1) ? "VOICE Header" : "TLC"), fids[j], fid);
+            if ((fid == 0) || (fid == 16)) { // Standard feature, MotoTRBO Capacity+
+              char flcostr[1024];
+              flcostr[0] = '\0';
+              processFlco(state, payload, flcostr);
+              printf("%s\n", flcostr);
             } else {
-              printf ("%s\n", slottype_to_string[bursttype]);
+              hexdump_packet(payload, packetdump);
+              printf("Unknown FLCO in voice header/TLC: %s\n", packetdump);
             }
+          } else if (bursttype == 3) {
+            unsigned char csbk_id = get_uint(payload+2, 6);
+            printf("fid: %s (%u) ", fids[j], fid);
+            if (csbk_id == 0x3d) {
+              unsigned char nblks = get_uint(payload+24, 8);
+              unsigned int txid = get_uint(payload+32, 24);
+              unsigned int rxid = get_uint(payload+56, 24);
+              printf("Preamble: %u %s blks, %s: %u RId: %u\n", nblks,
+                     ((payload[0] == '1')?"Data":"CSBK"),
+                     ((payload[1] == '1') ? "TGrp" : "TGid"),
+                     txid, rxid);
+            } else {
+              printf("CSBK: id: 0x%x\n", csbk_id);
+            }
+          } else if (bursttype == 6) {
+            process_dataheader(payload);
+          } else if (bursttype == 7) {
+            hexdump_packet(payload, packetdump);
+            printf("RATE 1/2 DATA: %s\n", packetdump);
           } else {
             printf ("%s\n", slottype_to_string[bursttype]);
           }
