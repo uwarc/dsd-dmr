@@ -244,6 +244,7 @@ void sigfun (int sig);
 void processAMBEFrame (dsd_opts * opts, dsd_state * state, char ambe_fr[4][24]);
 void processIMBEFrame (dsd_opts * opts, dsd_state * state, char imbe_d[88]);
 int getSymbol (dsd_opts * opts, dsd_state * state, int have_sync);
+void processEmb (dsd_state *state, unsigned char lcss, unsigned char syncdata[16]);
 void processDMRdata (dsd_opts * opts, dsd_state * state);
 void processDMRvoice (dsd_opts * opts, dsd_state * state);
 void processNXDNVoice (dsd_opts * opts, dsd_state * state);

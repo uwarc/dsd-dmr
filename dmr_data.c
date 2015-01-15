@@ -338,6 +338,7 @@ void processEmb (dsd_state *state, unsigned char lcss, unsigned char syncdata[16
   unsigned char fid = 0;
   unsigned char payload[97];
 
+  printf("\nDMR Embedded Signalling present in voice packet: LCSS: %u\n", lcss);
   AssembleEmb(state, lcss, syncdata, emb_deinv_fr);
   if(emb_fr_valid == 0x0f) {
       fid  = (((emb_deinv_fr[0] >> 11) & 0x07) << 5);
