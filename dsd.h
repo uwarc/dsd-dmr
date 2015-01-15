@@ -49,6 +49,7 @@ typedef struct
   unsigned int verbose;
   unsigned int p25status;
   unsigned int p25tg;
+  unsigned int p25enc;
   unsigned int datascope;
   int audio_in_fd;
   int audio_in_type; // 0 for device, 1 for file, 2 for portaudio
@@ -56,6 +57,8 @@ typedef struct
   char mbe_out_dir[1024];
   char mbe_out_path[1024];
   int mbe_out_fd;
+  unsigned int serial_baud;
+  int serial_fd;
   float audio_gain;
   unsigned int wav_out_samplerate;
   int wav_out_fd;
@@ -111,6 +114,8 @@ typedef struct
   unsigned int radio_id;
   unsigned int last_radio_id;
   unsigned short nac;
+  unsigned int p25kid;
+  unsigned int numtdulc;
   int errs;
   int errs2;
   int optind;
@@ -198,21 +203,32 @@ typedef struct
 #define PROVOICE_EA_SYNC     "31131311331331111133131311311133"
 
 /*
- * function prototypes
+ * Inline functions
+ */
+static inline unsigned int
+get_uint(unsigned char *payload, unsigned int bits)
+{
+    unsigned int i, v = 0;
+    for(i = 0; i < bits; i++) {
+        v <<= 1;
+        v |= payload[i];
+    }
+    return v;
+}
+
+/*
+ * Function prototypes 
  */
 void Golay23_Correct(unsigned int *block);
 unsigned int Golay23_Encode(unsigned int cw);
-
-void processDMRdata (dsd_opts * opts, dsd_state * state);
-void processDMRvoice (dsd_opts * opts, dsd_state * state);
-void processAudio (dsd_opts * opts, dsd_state * state);
-void writeSynthesizedVoice (dsd_opts * opts, dsd_state * state);
-int openAudioInDevice (dsd_opts *opts, const char *audio_in_dev);
+void Hamming15_11_3_Correct(unsigned int *block);
 
 int getDibit (dsd_opts * opts, dsd_state * state);
 void skipDibit (dsd_opts * opts, dsd_state * state, int count);
 void Shellsort_int(int *in, unsigned int n);
 
+int openAudioInDevice (dsd_opts *opts, const char *audio_in_dev);
+void demodAmbe3600x24x0Data (int *errs2, char ambe_fr[4][24], char ambe_d[49]);
 void saveAmbe2450Data (dsd_opts * opts, dsd_state * state, char *ambe_d);
 void closeMbeOutFile (dsd_opts * opts, dsd_state * state);
 void openMbeOutFile (dsd_opts * opts, dsd_state * state);
@@ -226,13 +242,15 @@ void noCarrier (dsd_opts * opts, dsd_state * state);
 void cleanupAndExit (dsd_opts * opts, dsd_state * state);
 void sigfun (int sig);
 void processAMBEFrame (dsd_opts * opts, dsd_state * state, char ambe_fr[4][24]);
-void processIMBEFrame (dsd_opts * opts, dsd_state * state, char imbe_fr[8][23]);
+void processIMBEFrame (dsd_opts * opts, dsd_state * state, char imbe_d[88]);
 int getSymbol (dsd_opts * opts, dsd_state * state, int have_sync);
-int processBPTC(unsigned char infodata[196], unsigned char payload[97]);
+void processDMRdata (dsd_opts * opts, dsd_state * state);
+void processDMRvoice (dsd_opts * opts, dsd_state * state);
 void processNXDNVoice (dsd_opts * opts, dsd_state * state);
 void processNXDNData (dsd_opts * opts, dsd_state * state);
 void processDSTAR (dsd_opts * opts, dsd_state * state);
 void processDSTAR_HD (dsd_opts * opts, dsd_state * state);
+void process_p25_frame(dsd_opts *opts, dsd_state *state, unsigned char duid);
 short dmr_filter(short sample);
 short nxdn_filter(short sample);
 
