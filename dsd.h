@@ -221,7 +221,8 @@ get_uint(unsigned char *payload, unsigned int bits)
  */
 void Golay23_Correct(unsigned int *block);
 unsigned int Golay23_Encode(unsigned int cw);
-void Hamming15_11_3_Correct(unsigned int *block);
+void Hamming15_11_3_Correct(unsigned int *codeword);
+unsigned int p25_hamming15_11_3_decode(unsigned int *codeword);
 
 int getDibit (dsd_opts * opts, dsd_state * state);
 void skipDibit (dsd_opts * opts, dsd_state * state, int count);

@@ -15,13 +15,43 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#define _MAIN
 #include "dsd.h"
 #include <sys/mman.h>
 
+#ifndef NO_REEDSOLOMON
 /* specify irreducible polynomial coeffts */
 static unsigned char generator_polinomial_dmr[9] = { 1, 0, 1, 1, 1, 0, 0, 0, 1}; /* MM = 8, TT = 2 */
 static unsigned char generator_polinomial_p25[7] = { 1, 1, 0, 0, 0, 0, 1 }; /* MM = 6, TT = 8 */
+#endif
+
+/*
+ * Copy src to string dst of size siz.  At most siz-1 characters
+ * will be copied.  Always NUL terminates (unless siz == 0).
+ * Returns strlen(src); if retval >= siz, truncation occurred.
+ */
+size_t dsd_strlcpy(char *dst, const char *src, size_t siz)
+{
+	char *d = dst;
+	const char *s = src;
+	size_t n = siz;
+
+	/* Copy as many bytes as will fit */
+	if (n != 0) {
+		while (--n != 0) {
+			if ((*d++ = *s++) == '\0')
+				break;
+		}
+	}
+
+	/* Not enough room in dst, add NUL and return */
+	if (n == 0) {
+		if (siz != 0)
+			*d = '\0';		/* NUL-terminate dst */
+		return siz;
+	}
+
+	return(s - src - 1);	/* count does not include NUL */
+}
 
 void
 noCarrier (dsd_opts * opts, dsd_state * state)
@@ -52,6 +82,7 @@ noCarrier (dsd_opts * opts, dsd_state * state)
   state->lastp25type = 0;
   state->repeat = 0;
   state->nac = 0;
+  state->numtdulc = 0;
   strcpy (state->slot0light, " slot0 ");
   strcpy (state->slot1light, " slot1 ");
   state->firstframe = 0;
@@ -123,6 +154,7 @@ static void initState (dsd_state * state)
   state->talkgroup = 0;
   state->lasttg = 0;
   state->radio_id = 0;
+  state->numtdulc = 0;
   state->errs = 0;
   state->errs2 = 0;
   state->optind = 0;
@@ -237,10 +269,12 @@ main (int argc, char **argv)
   vec.sa_handler = SIG_IGN;
   sigaction(SIGPIPE, &vec, NULL);
 
+#ifndef NO_REEDSOLOMON
   rs_init(&state.ReedSolomon_12_09_04, generator_polinomial_dmr, 8, 2);
   rs_init(&state.ReedSolomon_24_12_13, generator_polinomial_p25, 6, 6);
   rs_init(&state.ReedSolomon_24_16_09, generator_polinomial_p25, 6, 4);
-  rs_init(&state.ReedSolomon_36_20_17, generator_polinomial_p25, 4, 8);
+  rs_init(&state.ReedSolomon_36_20_17, generator_polinomial_p25, 6, 8);
+#endif
 
   while ((c = getopt (argc, argv, "hep:qv:si:o:d:g:nw:B:C:R:f:u:x:S:")) != -1)
     {
@@ -268,7 +302,7 @@ main (int argc, char **argv)
           audio_in_dev = optarg;
           break;
         case 'd':
-          strncpy(opts.mbe_out_dir, optarg, 1023);
+          dsd_strlcpy(opts.mbe_out_dir, optarg, 1023);
           opts.mbe_out_dir[1023] = '\0';
           printf ("Writing mbe data files to directory %s\n", opts.mbe_out_dir);
           break;
