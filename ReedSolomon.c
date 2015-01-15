@@ -157,10 +157,9 @@ void rs_encode(ReedSolomon *rs, const unsigned char *data, unsigned char *bb)
  symbols will be okay and that if we are in luck, the errors are in the
  parity part of the transmitted codeword).  Of course, these insoluble cases
  can be returned as error flags to the calling routine if desired.   */
-int rs_decode(ReedSolomon *rs, unsigned char *input)
+int rs_decode(ReedSolomon *rs, unsigned char *input, unsigned char *recd)
 {
     register int i, j, u, q;
-    unsigned char recd[MAX_NN];
     int elp[MAX_NN + 2][MAX_NN], d[MAX_NN + 2], l[MAX_NN + 2], u_lu[MAX_NN + 2], s[MAX_NN + 1];
     int count = 0, syn_error = 0, root[MAX_TT], loc[MAX_TT], z[MAX_TT + 1], err[MAX_NN], reg[MAX_TT + 1];
     int irrecoverable_error = 0;
@@ -311,7 +310,7 @@ int rs_decode(ReedSolomon *rs, unsigned char *input)
                 for (i = 0; i < rs->nn; i++) {
                     err[i] = 0;
                     /* convert recd[] to polynomial form */
-                    input[i] = rs->alpha_to[recd[i]];
+                    recd[i] = rs->alpha_to[recd[i]];
                 }
                 for (i = 0; i < l[u]; i++) /* compute numerator of error term first */
                 {
@@ -327,7 +326,7 @@ int rs_decode(ReedSolomon *rs, unsigned char *input)
                                 q += rs->index_of[1 ^ rs->alpha_to[(loc[j] + root[i]) % rs->nn]];
                         q = q % rs->nn;
                         err[loc[i]] = rs->alpha_to[(err[loc[i]] - q + rs->nn) % rs->nn];
-                        input[loc[i]] ^= err[loc[i]]; /*input[i] must be in polynomial form */
+                        recd[loc[i]] ^= err[loc[i]]; /* recd[i] must be in polynomial form */
                     }
                 }
             } else {
@@ -342,13 +341,13 @@ int rs_decode(ReedSolomon *rs, unsigned char *input)
         /* no non-zero syndromes => no errors: output received codeword */
         for (i = 0; i < rs->nn; i++)
             /* convert recd[] to polynomial form */
-            input[i] = rs->alpha_to[recd[i]];
+            recd[i] = rs->alpha_to[recd[i]];
     }
 
     if (irrecoverable_error) {
         for (i = 0; i < rs->nn; i++) /* could return error flag if desired */
             /* convert recd[] to polynomial form */
-            input[i] = rs->alpha_to[recd[i]];
+            recd[i] = rs->alpha_to[recd[i]];
     }
 
     return irrecoverable_error;

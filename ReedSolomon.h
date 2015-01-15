@@ -19,6 +19,6 @@ typedef struct _ReedSolomon {
 
 void rs_init(ReedSolomon *rs, unsigned char *generator_polinomial, unsigned char mm, unsigned char tt);
 void rs_encode(ReedSolomon *rs, const unsigned char *data, unsigned char *bb);
-int rs_decode(ReedSolomon *rs, unsigned char *input);
+int rs_decode(ReedSolomon *rs, unsigned char *input, unsigned char *output);
 
 #endif
