@@ -243,7 +243,7 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
                 state->lastsynctype = 4;
             } else {
                 // inverted data frame
-                sprintf (state->ftype, " -X2-TDMA     ");
+                strcpy (state->ftype, " -X2-TDMA     ");
                 state->lastsynctype = 5;
             }
             return state->lastsynctype;
