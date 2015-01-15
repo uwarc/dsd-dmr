@@ -377,7 +377,7 @@ void processEmb (dsd_state *state, unsigned char lcss, unsigned char syncdata[16
   }
 }
 
-#ifdef USE_REEDSOLOMON
+#ifndef NO_REEDSOLOMON
 // rs_mask = 0x96 for Voice Header, 0x99 for TLC.
 static unsigned int check_and_fix_reedsolomon_12_09_04(ReedSolomon *rs, unsigned char payload[97], unsigned char rs_mask)
 {
@@ -562,7 +562,7 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
             hexdump_packet(payload, packetdump);
             printf("PI Header: %s\n", packetdump);
           } else if ((bursttype == 1) || (bursttype == 2)) {
-#ifdef USE_REEDSOLOMON
+#ifndef NO_REEDSOLOMON
             unsigned char rs_mask = ((bursttype == 1) ? 0x96 : 0x99);
             unsigned int nerrs = check_and_fix_reedsolomon_12_09_04(&state->ReedSolomon_12_09_04, payload, rs_mask);
             state->debug_header_errors += nerrs;
