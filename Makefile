@@ -3,7 +3,7 @@ EXEC = ./dsd
 
 # SETTINGS
 CC = gcc
-CCCFLAGS = -Wall -Wextra -MMD
+CFLAGS += -Wall -Wextra -MMD -fno-omit-frame-pointer
 LDLIBS = -lmbe -lm
 
 # Removes one of the dsd_symbol methods
@@ -18,7 +18,7 @@ CCDEPENDS = ${CCOBJECTS:.o=.d}
 
 # MAKE METHODS
 ${EXEC}: ${CCOBJECTS}
-	${CC} ${CCFLAGS} ${LDFLAGS} ${CCOBJECTS} -o ${EXEC} ${LDLIBS}
+	${CC} ${CFLAGS} ${LDFLAGS} ${CCOBJECTS} -o ${EXEC} ${LDLIBS}
 
 -include ${CCDEPENDS}
 
