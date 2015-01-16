@@ -5,13 +5,11 @@ void
 processNXDNData (dsd_opts * opts, dsd_state * state)
 {
   int i, dibit;
-  int *dibit_p;
   char lich[9];
   char lich_scram[9] = { 0, 0, 1, 0, 0, 1, 1, 1, 0 };
-  dibit_p = state->dibit_buf_p - 8;
 
   for (i = 0; i < 8; i++) {
-      dibit = *dibit_p++;
+      dibit = getDibit (opts, state);
       if(lich_scram[i] ^ (state->lastsynctype & 0x1)) {
           dibit = (dibit ^ 2);
       }
@@ -43,7 +41,7 @@ processNXDNData (dsd_opts * opts, dsd_state * state)
       printf("\n");
   }
 
-  skipDibit (opts, state, 174);
+  skipDibit (opts, state, 166);
 }
 
 void

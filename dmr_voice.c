@@ -99,28 +99,16 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
   int mutecurrentslot = 0;
   unsigned char msMode = 0;
 
-  dibit_p = state->dibit_buf_p - 144;
+  dibit_p = state->dibit_buf_p - 24;
   for (j = 0; j < 6; j++) {
       // 2nd half of previous slot
       for (i = 0; i < 54; i++) {
-          if (j > 0) {
-              dibit = getDibit (opts, state);
-          } else {
-              dibit = *dibit_p++;
-              if (opts->inverted_dmr == 1)
-                  dibit = (dibit ^ 2);
-          }
+          dibit = getDibit (opts, state);
       }
 
       // CACH
       for (i = 0; i < 12; i++) {
-        if (j > 0) {
-          dibit = getDibit (opts, state);
-        } else {
-          dibit = *dibit_p++;
-          if (opts->inverted_dmr == 1)
-            dibit = (dibit ^ 2);
-        }
+        dibit = getDibit (opts, state);
         cachbits[2*i] = (1 & (dibit >> 1));    // bit 1
         cachbits[2*i+1] = (1 & dibit);   // bit 0
       }
@@ -143,26 +131,14 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
 
       // current slot frame 1
       for (i = 0; i < 36; i++) {
-          if (j > 0) {
-              dibit = getDibit (opts, state);
-          } else {
-              dibit = *dibit_p++;
-              if (opts->inverted_dmr == 1)
-                  dibit = (dibit ^ 2);
-          }
+          dibit = getDibit (opts, state);
           ambe_fr[rW[i]][rX[i]] = (1 & (dibit >> 1)); // bit 1
           ambe_fr[rY[i]][rZ[i]] = (1 & dibit);        // bit 0
       }
 
       // current slot frame 2 first half
       for (i = 0; i < 18; i++) {
-          if (j > 0) {
-              dibit = getDibit (opts, state);
-          } else {
-              dibit = *dibit_p++;
-              if (opts->inverted_dmr == 1)
-                  dibit = (dibit ^ 2);
-          }
+          dibit = getDibit (opts, state);
           ambe_fr2[rW[i]][rX[i]] = (1 & (dibit >> 1));        // bit 1
           ambe_fr2[rY[i]][rZ[i]] = (1 & dibit);       // bit 0
       }
@@ -193,7 +169,10 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
           if (!doQR1676(&emb_field)) {
 #endif
               lcss = ((emb_field >> 10) & 3);
-              processEmb (state, lcss, syncdata);
+              AssembleEmb (state, lcss, syncdata);
+              if(emb_fr_valid == 0x0f) {
+                processEmb (state, lcss, emb_fr);
+              }
 #if 0
           }
 #endif
@@ -296,17 +275,6 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
           } else {
               strcpy (state->slot0light, " SLOT0 ");
           }
-      }
-
-      if (j == 5) {
-          // 2nd half next slot
-          skipDibit (opts, state, 54);
-
-          // CACH
-          skipDibit (opts, state, 12);
-
-          // first half current slot
-          skipDibit (opts, state, 54);
       }
   }
 }
