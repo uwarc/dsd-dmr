@@ -398,6 +398,25 @@ static int ReedSolomon_24_16_09_decode(ReedSolomon *rs, unsigned char* hex_data,
     return irrecoverable_errors;
 }
 
+static void update_p25_error_stats (dsd_state* state, unsigned int nbits, unsigned int n_errs)
+{
+    state->p25_bit_count += nbits;
+    state->p25_bit_error_count += n_errs;
+    while ((!(state->p25_bit_count & 1)) && (!(state->p25_bit_error_count & 1))) {
+        state->p25_bit_count >>= 1;
+        state->p25_bit_error_count >>= 1;
+    }
+}
+
+float get_p25_ber_estimate (dsd_state* state)
+{
+    float ber = 0.0f;
+    if (state->p25_bit_count > 0) {
+        ber = (((float)state->p25_bit_count) * 100.0f / ((float)state->p25_bit_error_count));
+    }
+    return ber;
+}
+
 /**
  * The important method that processes a full P25 HD unit.
  */
@@ -435,7 +454,10 @@ processHDU(dsd_opts* opts, dsd_state* state)
   irrecoverable_errors = ReedSolomon_36_20_17_decode(&state->ReedSolomon_36_20_17,
                                                      (unsigned char*)hex_data,
                                                      (unsigned char*)hex_parity);
-  state->debug_header_critical_errors += irrecoverable_errors;
+  if (irrecoverable_errors != 0) {
+      state->debug_header_critical_errors += irrecoverable_errors;
+      update_p25_error_stats(state, 20*6+16*6, 9*4);
+  }
 #endif
 
   // Now put the corrected data on the DSD structures
@@ -657,6 +679,7 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
                                                      (unsigned char*)hex_parity);
   if (irrecoverable_errors == 1) {
       state->debug_header_critical_errors++;
+      update_p25_error_stats(state, 12*6+12*6, 7*2);
   }
 #endif
 
@@ -803,6 +826,7 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
                                                      (unsigned char*)hex_parity);
   if (irrecoverable_errors == 1) {
       state->debug_header_critical_errors++;
+      update_p25_error_stats(state, 12*6+12*6, 5*2);
   }
 #endif
 
@@ -938,9 +962,9 @@ processTDULC (dsd_opts* opts, dsd_state* state)
       state->debug_header_critical_errors++;
       // We can correct (13-1)/2 = 6 errors. If we failed, it means that there were more than 6 errors in
       // these 12+12 words. But take into account that each hex word was already error corrected with
-      // Golay 24, which can correct 3 bits on each sequence of (12+12) bits. We could say that there were
+      // Golay 23, which can correct 3 bits on each sequence of (12+11) bits. We could say that there were
       // 7 errors of 4 bits.
-      // update_error_stats(&state->p25_heuristics, 12*6+12*6, 7*4);
+      update_p25_error_stats(state, 12*6+12*6, 7*4);
   }
 #endif
 

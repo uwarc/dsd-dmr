@@ -139,6 +139,9 @@ typedef struct
   // Last dibit read
   int last_dibit;
 
+  unsigned int p25_bit_count;
+  unsigned int p25_bit_error_count;
+
   ReedSolomon ReedSolomon_12_09_04;
 
   ReedSolomon ReedSolomon_24_12_13;
@@ -245,7 +248,7 @@ void sigfun (int sig);
 void processAMBEFrame (dsd_opts * opts, dsd_state * state, char ambe_fr[4][24]);
 void processIMBEFrame (dsd_opts * opts, dsd_state * state, char imbe_d[88]);
 int getSymbol (dsd_opts * opts, dsd_state * state, int have_sync);
-void processEmb (dsd_state *state, unsigned char lcss, unsigned char syncdata[16]);
+void processEmb (dsd_state *state, unsigned char lcss, unsigned char emb_fr[4][32]);
 void processDMRdata (dsd_opts * opts, dsd_state * state);
 void processDMRvoice (dsd_opts * opts, dsd_state * state);
 void processNXDNVoice (dsd_opts * opts, dsd_state * state);
@@ -253,6 +256,7 @@ void processNXDNData (dsd_opts * opts, dsd_state * state);
 void processDSTAR (dsd_opts * opts, dsd_state * state);
 void processDSTAR_HD (dsd_opts * opts, dsd_state * state);
 void process_p25_frame(dsd_opts *opts, dsd_state *state, unsigned char duid);
+float get_p25_ber_estimate (dsd_state* state);
 short dmr_filter(short sample);
 short nxdn_filter(short sample);
 
