@@ -65,6 +65,7 @@ typedef struct
   unsigned int uvquality;
   unsigned char frame_types; // 0 -> DMR, 1 -> DStar, 2 -> NXDN48, 3 -> NXDN96, 4 -> P25P1
   unsigned char inverted_dmr;
+  unsigned char inverted_x2tdma;
   unsigned int ssize;
   unsigned int msize;
   unsigned int mod_threshold;
@@ -100,7 +101,6 @@ typedef struct
   int minbuf[1024];
   int midx;
   char err_str[64];
-  char fsubtype[16]; // kill
   char ftype[16];
   int symbolcnt;
   int rf_mod;
@@ -114,6 +114,8 @@ typedef struct
   unsigned int radio_id;
   unsigned int last_radio_id;
   unsigned short nac;
+  unsigned short p25algid;
+  unsigned short p25keyid;
   unsigned int p25kid;
   unsigned int numtdulc;
   int errs;
@@ -253,6 +255,7 @@ void processDMRdata (dsd_opts * opts, dsd_state * state);
 void processDMRvoice (dsd_opts * opts, dsd_state * state);
 void processNXDNVoice (dsd_opts * opts, dsd_state * state);
 void processNXDNData (dsd_opts * opts, dsd_state * state);
+void processX2TDMAData (dsd_opts * opts, dsd_state * state);
 void processDSTAR (dsd_opts * opts, dsd_state * state);
 void processDSTAR_HD (dsd_opts * opts, dsd_state * state);
 void process_p25_frame(dsd_opts *opts, dsd_state *state, unsigned char duid);

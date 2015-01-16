@@ -208,7 +208,6 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             return state->lastsynctype;
           }
 
-#if 0
           if ((strcmp (synctest, X2TDMA_BS_DATA_SYNC) == 0) || (strcmp (synctest, X2TDMA_MS_DATA_SYNC) == 0)) {
             state->carrier = 1;
             state->offset = synctest_pos;
@@ -229,6 +228,7 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             return state->lastsynctype;
           }
 
+#if 0
           if ((strcmp (synctest, X2TDMA_BS_VOICE_SYNC) == 0) || (strcmp (synctest, X2TDMA_MS_VOICE_SYNC) == 0)) {
             state->carrier = 1;
             state->offset = synctest_pos;
