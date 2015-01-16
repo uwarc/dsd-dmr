@@ -107,8 +107,13 @@ get_p25_nac_and_duid(dsd_opts *opts, dsd_state *state)
 void
 processFrame (dsd_opts * opts, dsd_state * state)
 {
-  state->maxref = state->max;
-  state->minref = state->min;
+  if (state->rf_mod == 1) {
+    state->maxref = (state->max * 0.80f);
+    state->minref = (state->min * 0.80f);
+  } else {
+    state->maxref = state->max;
+    state->minref = state->min;
+  }
 
   state->lasttg = 0;
   state->last_radio_id = 0;
