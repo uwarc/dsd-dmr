@@ -49,6 +49,39 @@ static unsigned char hamming7_4_correct(unsigned char value)
     return c;
 }
 
+static unsigned char emb_fr[4][32];
+static unsigned int emb_fr_index = 0;
+static unsigned int emb_fr_valid = 0;
+
+static void AssembleEmb (dsd_state *state, unsigned char lcss, unsigned char syncdata[16])
+{
+  int i, dibit;
+
+  switch(lcss) {
+    case 0: //Single fragment LC or first fragment CSBK signalling (used for Reverse Channel)
+      return;
+      break;
+    case 1: // First Fragment of LC signaling
+      emb_fr_index = 0;
+      emb_fr_valid = 0;
+      break;
+    case 2: // Last Fragment of LC or CSBK signaling
+      if(++emb_fr_index != 3)
+	    return;
+      break;
+    case 3:
+      if(++emb_fr_index >= 4)
+	    return;
+	  break;
+  }
+  for(i = 0; i < 16; i++) {
+      dibit = syncdata[i+4];
+      emb_fr[emb_fr_index][2*i] = ((dibit >> 1) & 1);
+      emb_fr[emb_fr_index][2*i+1] = (dibit & 1);
+  }
+  emb_fr_valid |= (1 << emb_fr_index);
+}
+
 void
 processDMRvoice (dsd_opts * opts, dsd_state * state)
 {
