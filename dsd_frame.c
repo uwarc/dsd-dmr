@@ -147,9 +147,16 @@ processFrame (dsd_opts * opts, dsd_state * state)
           }
           processDMRvoice (opts, state);
       } else {
-          closeMbeOutFile (opts, state);
           state->err_str[0] = 0;
           processDMRdata (opts, state);
+      }
+      return;
+  } else if ((state->synctype >= 2) && (state->synctype <= 5)) {
+      if ((state->synctype == 3) || (state->synctype == 4)) {
+          //processX2TDMAvoice (opts, state);
+      } else {
+          state->err_str[0] = 0;
+          processX2TDMAData (opts, state);
       }
       return;
   } else {

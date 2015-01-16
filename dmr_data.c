@@ -508,6 +508,10 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
     print_burst = 0;
   }
 
+  if ((bursttype == 1) || (bursttype == 2)) {
+    closeMbeOutFile (opts, state);
+  }
+
   // 2nd half next slot
   for (i = 49; i < 98; i++) {
       dibit = getDibit (opts, state);
