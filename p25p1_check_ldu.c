@@ -32,7 +32,7 @@ void ReedSolomon_36_20_17_encode(ReedSolomon *rs, unsigned char* hex_data, unsig
     }
 
     // Now we can call encode on the base class
-    rs_encode(rs, input, output);
+    rs6_encode(rs, input, output);
 
     // Convert it back to binary form and put it into the parity
     for(i=0; i<16; i++) {
@@ -62,7 +62,7 @@ int ReedSolomon_36_20_17_decode(ReedSolomon *rs, unsigned char* hex_data, unsign
     }
 
     // Now we can call decode on the base class
-    irrecoverable_errors = rs_decode(rs, input, output);
+    irrecoverable_errors = rs6_decode(rs, input, output);
 
     // Convert it back to binary and put it into hex_data. If decode failed we should have
     // the input unchanged.
@@ -90,7 +90,7 @@ void ReedSolomon_24_16_09_encode(ReedSolomon *rs, unsigned char* hex_data, unsig
     }
 
     // Now we can call encode on the base class
-    rs_encode(rs, input, output);
+    rs6_encode(rs, input, output);
 
     // Convert it back to binary form and put it into the parity
     for(i=0; i<8; i++) {
@@ -120,7 +120,7 @@ int ReedSolomon_24_16_09_decode(ReedSolomon *rs, unsigned char* hex_data, unsign
     }
 
     // Now we can call decode on the base class
-    irrecoverable_errors = rs_decode(rs, input, output);
+    irrecoverable_errors = rs6_decode(rs, input, output);
 
     // Convert it back to binary and put it into hex_data. If decode failed we should have
     // the input unchanged.
@@ -153,7 +153,7 @@ int ReedSolomon_24_12_13_decode(ReedSolomon *rs, unsigned char* hex_data, unsign
     }
 
     // Now we can call decode on the base class
-    irrecoverable_errors = rs_decode(rs, input, output);
+    irrecoverable_errors = rs6_decode(rs, input, output);
 
     // Convert it back to binary and put it into hex_data. If decode failed we should have
     // the input unchanged.
@@ -181,7 +181,7 @@ void ReedSolomon_24_12_13_encode(ReedSolomon *rs, unsigned char* hex_data, unsig
     }
 
     // Now we can call encode on the base class
-    rs_encode(rs, input, output);
+    rs6_encode(rs, input, output);
 
     // Convert it back to binary form and put it into the parity
     for(i=0; i<12; i++) {

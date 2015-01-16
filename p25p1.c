@@ -321,7 +321,7 @@ static int ReedSolomon_36_20_17_decode(ReedSolomon *rs, unsigned char* hex_data,
     }
 
     // Now we can call decode on the base class
-    irrecoverable_errors = rs_decode(rs, input, output);
+    irrecoverable_errors = rs6_decode(rs, input, output);
 
     // Convert it back to binary and put it into hex_data. If decode failed we should have
     // the input unchanged.
@@ -354,7 +354,7 @@ static int ReedSolomon_24_12_13_decode(ReedSolomon *rs, unsigned char* hex_data,
     }
 
     // Now we can call decode on the base class
-    irrecoverable_errors = rs_decode(rs, input, output);
+    irrecoverable_errors = rs6_decode(rs, input, output);
 
     // Convert it back to binary and put it into hex_data. If decode failed we should have
     // the input unchanged.
@@ -387,7 +387,7 @@ static int ReedSolomon_24_16_09_decode(ReedSolomon *rs, unsigned char* hex_data,
     }
 
     // Now we can call decode on the base class
-    irrecoverable_errors = rs_decode(rs, input, output);
+    irrecoverable_errors = rs6_decode(rs, input, output);
 
     // Convert it back to binary and put it into hex_data. If decode failed we should have
     // the input unchanged.
