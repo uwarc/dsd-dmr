@@ -20,8 +20,8 @@
 
 #ifndef NO_REEDSOLOMON
 /* specify irreducible polynomial coeffts */
-static unsigned char generator_polinomial_dmr[9] = { 1, 0, 1, 1, 1, 0, 0, 0, 1}; /* MM = 8, TT = 2 */
-static unsigned char generator_polinomial_p25[7] = { 1, 1, 0, 0, 0, 0, 1 }; /* MM = 6, TT = 8 */
+static unsigned int generator_polynomial_dmr = 0x11D; /* MM = 8, TT = 2 */
+static unsigned int generator_polynomial_p25 = 0x43; /* MM = 6, TT = 8 */
 #endif
 
 /*
@@ -270,10 +270,10 @@ main (int argc, char **argv)
   sigaction(SIGPIPE, &vec, NULL);
 
 #ifndef NO_REEDSOLOMON
-  rs_init(&state.ReedSolomon_12_09_04, generator_polinomial_dmr, 8, 2);
-  rs_init(&state.ReedSolomon_24_12_13, generator_polinomial_p25, 6, 6);
-  rs_init(&state.ReedSolomon_24_16_09, generator_polinomial_p25, 6, 4);
-  rs_init(&state.ReedSolomon_36_20_17, generator_polinomial_p25, 6, 8);
+  rs8_init(&state.ReedSolomon_12_09_04, generator_polynomial_dmr, 2);
+  rs6_init(&state.ReedSolomon_24_12_13, generator_polynomial_p25, 6);
+  rs6_init(&state.ReedSolomon_24_16_09, generator_polynomial_p25, 4);
+  rs6_init(&state.ReedSolomon_36_20_17, generator_polynomial_p25, 8);
 #endif
 
   while ((c = getopt (argc, argv, "hep:qv:si:o:d:g:nw:B:C:R:f:u:x:S:")) != -1)
