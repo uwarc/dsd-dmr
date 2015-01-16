@@ -108,6 +108,7 @@ static inline void initOpts (dsd_opts * opts)
   opts->uvquality = 3;
   //opts->mod_qpsk = 0;
   opts->inverted_dmr = 0;       // most transmitter + scanner + sound card combinations show non-inverted signals for this
+  opts->inverted_x2tdma = 1;    // most transmitter + scanner + sound card combinations show inverted signals for this
   opts->mod_threshold = 26;
   opts->ssize = 36;
   opts->msize = 15;
@@ -201,6 +202,7 @@ static void usage ()
   printf ("\n");
   printf ("Decoder options:\n");
   printf ("  -u <num>      Unvoiced speech quality (default=3)\n");
+  printf ("  -xx           Expect non-inverted X2-TDMA signal\n");
   printf ("  -xr           Expect inverted DMR/MOTOTRBO signal\n");
   printf ("\n");
   printf ("Advanced decoder options:\n");
@@ -338,11 +340,13 @@ main (int argc, char **argv)
           printf ("Setting unvoice speech quality to %i waves per band.\n", opts.uvquality);
           break;
         case 'x':
-          if (optarg[0] == 'r')
-            {
+          if (optarg[0] == 'x') {
+              opts.inverted_x2tdma = 0;
+              printf ("Expecting non-inverted X2-TDMA signals.\n");
+          } else if (optarg[0] == 'r') {
               opts.inverted_dmr = 1;
               printf ("Expecting inverted DMR/MOTOTRBO signals.\n");
-            }
+          }
           break;
         case 'S':
           opts.ssize = strtoul(optarg, NULL, 10);
