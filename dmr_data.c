@@ -169,9 +169,9 @@ void Hamming15_11_3_Correct(unsigned int *block)
     //*block = (codeword >> 4);
 }
 
+static const char hex[]="0123456789abcdef";
 static void hexdump_packet(unsigned char payload[96], unsigned char packetdump[31])
 {
-    static const char hex[]="0123456789abcdef";
     unsigned int i, j, l = 0;
     for (i = 0, j = 0; i < 80; i++) {
         l <<= 1;
@@ -196,7 +196,7 @@ static void process_dataheader(unsigned char payload[96])
            ((payload[1]) ? 'A' : ' '), get_uint(payload+8, 4), get_uint(payload+64, 16));
 }
 
-unsigned int processFlco(dsd_state *state, unsigned char payload[97], char flcostr[1024])
+static unsigned int processFlco(dsd_state *state, unsigned char payload[97], char flcostr[1024])
 {
   char flco[7];
   unsigned int l = 0, i, k = 0;
@@ -228,8 +228,11 @@ unsigned int processFlco(dsd_state *state, unsigned char payload[97], char flcos
     k = snprintf(flcostr, 1023, "Msg: Terminator Data LC, Talkgroup: %u, RadioId: %u, N(s): %u", state->lasttg, radio_id, l);
   } else { 
     k = snprintf(flcostr, 1023, "Unknown Standard/Capacity+ FLCO: flco: %s, packet_dump: ", flco);
-    for (i = 0; i < 64; i++) {
-        flcostr[k++] = (payload[i+16] + 0x30);
+    for (i = 2; i < 12; i++) {
+        l = get_uint(payload+i*8, 8);
+        flcostr[k++] = hex[((l >> 4) & 0x0f)];
+        flcostr[k++] = hex[((l >> 0) & 0x0f)];
+        flcostr[k++] = ' ';
     }
     flcostr[k] = '\0';
   }
@@ -281,57 +284,7 @@ static void processBPTC(unsigned char infodata[196], unsigned char payload[97])
   }
 }
 
-static unsigned char emb_fr[4][32];
-static unsigned int emb_fr_index = 0;
-static unsigned int emb_fr_valid = 0;
-
-void AssembleEmb (dsd_state *state, unsigned char lcss, unsigned char syncdata[16], unsigned int emb_deinv_fr[8])
-{
-  int i, k, dibit;
-
-  switch(lcss) {
-    case 0: //Single fragment LC or first fragment CSBK signalling (used for Reverse Channel)
-      return;
-      break;
-    case 1: // First Fragment of LC signaling
-      emb_fr_index = 0;
-      emb_fr_valid = 0;
-      break;
-    case 2: // Last Fragment of LC or CSBK signaling
-      if(++emb_fr_index != 3)
-	    return;
-      break;
-    case 3:
-      if(++emb_fr_index >= 4)
-	    return;
-	  break;
-  }
-  for(i = 0; i < 16; i++) {
-      dibit = syncdata[i+4];
-      emb_fr[emb_fr_index][2*i] = ((dibit >> 1) & 1);
-      emb_fr[emb_fr_index][2*i+1] = (dibit & 1);
-  }
-  emb_fr_valid |= (1 << emb_fr_index);
-  if(emb_fr_valid == 0x0f) {
-      // Deinterleave
-      for (i = 0; i < 8; i++) {
-        emb_deinv_fr[i] = 0;
-      }
-      for (k = 0; k < 15; k++) {
-        for (i = 0; i < 8; i++) {
-          emb_deinv_fr[i] <<= 1;
-	      emb_deinv_fr[i] |= emb_fr[((8*k+i) >> 5)][((8*k+i) & 31)];
-        }
-	  }
-      for(i = 0; i < 8; i++) {
-        unsigned int hamming_codeword = emb_deinv_fr[i];
-        Hamming15_11_3_Correct(&hamming_codeword);
-        emb_deinv_fr[i] = hamming_codeword;
-      }
-  }
-}
-
-void processEmb (dsd_state *state, unsigned char lcss, unsigned char syncdata[16])
+void processEmb (dsd_state *state, unsigned char lcss, unsigned char emb_fr[4][32])
 {
   int i, k;
   unsigned int emb_deinv_fr[8];
@@ -339,41 +292,54 @@ void processEmb (dsd_state *state, unsigned char lcss, unsigned char syncdata[16
   unsigned char payload[97];
 
   printf("\nDMR Embedded Signalling present in voice packet: LCSS: %u\n", lcss);
-  AssembleEmb(state, lcss, syncdata, emb_deinv_fr);
-  if(emb_fr_valid == 0x0f) {
-      fid  = (((emb_deinv_fr[0] >> 11) & 0x07) << 5);
-      fid |= (((emb_deinv_fr[1] >>  4) & 0x1f) << 0);
 
-      for (i = 0; i < 6; i++) {
-	    payload[5-i+2] = ((emb_deinv_fr[0] >> (6+i)) & 0x01);
-	  }
+  // Deinterleave
+  for (i = 0; i < 8; i++) {
+    emb_deinv_fr[i] = 0;
+  }
+  for (k = 0; k < 15; k++) {
+    for (i = 0; i < 8; i++) {
+      emb_deinv_fr[i] <<= 1;
+      emb_deinv_fr[i] |= emb_fr[((8*k+i) >> 5)][((8*k+i) & 31)];
+    }
+  }
+  for(i = 0; i < 8; i++) {
+    unsigned int hamming_codeword = emb_deinv_fr[i];
+    Hamming15_11_3_Correct(&hamming_codeword);
+    emb_deinv_fr[i] = hamming_codeword;
+  }
+  fid  = (((emb_deinv_fr[0] >> 11) & 0x07) << 5);
+  fid |= (((emb_deinv_fr[1] >>  4) & 0x1f) << 0);
 
-      for (i = 0; i < 8; i++) {
-        payload[i+8] = ((fid >> (7-i)) & 1);
-      }
+  for (i = 0; i < 6; i++) {
+    payload[5-i+2] = ((emb_deinv_fr[0] >> (6+i)) & 0x01);
+  }
 
-      for (i = 0; i < 6; i++) {
-	    payload[5-i+16] = ((emb_deinv_fr[1] >> (9+i)) & 0x01);
-	  }
-      for (i = 0; i < 11; i++) {
-        k = (14 - i);
-	    payload[i+21] = ((emb_deinv_fr[2] >> k) & 0x01);
-	    payload[i+31] = ((emb_deinv_fr[3] >> k) & 0x01);
-	    payload[i+41] = ((emb_deinv_fr[4] >> k) & 0x01);
-	    payload[i+51] = ((emb_deinv_fr[5] >> k) & 0x01);
-	    payload[i+61] = ((emb_deinv_fr[6] >> k) & 0x01);
-	    payload[i+71] = ((emb_deinv_fr[7] >> k) & 0x01);
-	  }
-      if ((fid == 0) || (fid == 16)) { // Standard feature, MotoTRBO Capacity+
-        char flcostr[1024];
-        flcostr[0] = '\0';
-        processFlco(state, payload, flcostr);
-        printf("Embedded Signalling: fid: %s (%u): %s\n", fids[fid_mapping[fid]], fid, flcostr);
-      } else {
-        unsigned char packetdump[81];
-        hexdump_packet(payload, packetdump);
-        printf("Unknown FLCO in embedded signalling: %s\n", packetdump);
-      }
+  for (i = 0; i < 8; i++) {
+    payload[i+8] = ((fid >> (7-i)) & 1);
+  }
+
+  for (i = 0; i < 6; i++) {
+    payload[5-i+16] = ((emb_deinv_fr[1] >> (9+i)) & 0x01);
+  }
+  for (i = 0; i < 11; i++) {
+    k = (14 - i);
+	payload[i+21] = ((emb_deinv_fr[2] >> k) & 0x01);
+	payload[i+31] = ((emb_deinv_fr[3] >> k) & 0x01);
+	payload[i+41] = ((emb_deinv_fr[4] >> k) & 0x01);
+	payload[i+51] = ((emb_deinv_fr[5] >> k) & 0x01);
+	payload[i+61] = ((emb_deinv_fr[6] >> k) & 0x01);
+	payload[i+71] = ((emb_deinv_fr[7] >> k) & 0x01);
+  }
+  if ((fid == 0) || (fid == 16)) { // Standard feature, MotoTRBO Capacity+
+    char flcostr[1024];
+    flcostr[0] = '\0';
+    processFlco(state, payload, flcostr);
+    printf("Embedded Signalling: fid: %s (%u): %s\n", fids[fid_mapping[fid]], fid, flcostr);
+  } else {
+    unsigned char packetdump[81];
+    hexdump_packet(payload, packetdump);
+    printf("Unknown FLCO in embedded signalling: %s\n", packetdump);
   }
 }
 
@@ -385,7 +351,7 @@ static unsigned int check_and_fix_reedsolomon_12_09_04(ReedSolomon *rs, unsigned
   unsigned char input[255];
   unsigned char output[255];
 
-  for (i=0; i<rs->nn; i++) {
+  for (i=0; i<255; i++) {
     input[i] = 0;
   }
 
@@ -397,7 +363,7 @@ static unsigned int check_and_fix_reedsolomon_12_09_04(ReedSolomon *rs, unsigned
   input[11] ^= rs_mask;
 
   /* decode recv[] */
-  errorFlag = rs_decode(rs, input, output);
+  errorFlag = rs8_decode(rs, input, output);
 
   for(i = 0; i < 12; i++) {
     payload[8*i  ] = ((output[i] & 128)? 1 : 0);
