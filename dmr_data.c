@@ -417,7 +417,6 @@ void
 processDMRdata (dsd_opts * opts, dsd_state * state)
 {
   int i, j, dibit;
-  int *dibit_p;
   char sync[25];
   unsigned char cach1bits[25];
   unsigned char cach1_hdr = 0, cach1_hdr_hamming = 0;
@@ -429,17 +428,12 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   unsigned char fid = 0;
   unsigned int print_burst = 1;
 
-  dibit_p = state->dibit_buf_p - 90;
-
   // CACH
   for (i = 0; i < 12; i++) {
-      dibit = *dibit_p++;
-      if (opts->inverted_dmr == 1)
-          dibit = (dibit ^ 2);
+      dibit = getDibit (opts, state);
       cach1bits[cach_deinterleave[2*i]] = (1 & (dibit >> 1));    // bit 1
       cach1bits[cach_deinterleave[2*i+1]] = (1 & dibit);   // bit 0
   }
-
   cach1_hdr  = ((cach1bits[0] << 0) | (cach1bits[1] << 1) | (cach1bits[2] << 2) | (cach1bits[3] << 3));
   cach1_hdr |= ((cach1bits[4] << 4) | (cach1bits[5] << 5) | (cach1bits[6] << 6));
   cach1_hdr_hamming = hamming7_4_correct(cach1_hdr);
@@ -459,41 +453,30 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
 
   // current slot
   for (i = 0; i < 49; i++) {
-      dibit = *dibit_p++;
-      if (opts->inverted_dmr == 1) {
-          dibit = (dibit ^ 2);
-      }
+      dibit = getDibit (opts, state);
       infodata[2*i] = (1 & (dibit >> 1)); // bit 1
       infodata[2*i+1] = (1 & dibit);        // bit 0
   }
 
   // slot type
-  //dibit_p += 2;
-  golay_codeword  = *dibit_p++;
+  golay_codeword  = getDibit (opts, state);
   golay_codeword <<= 2;
-  golay_codeword |= *dibit_p++;
+  golay_codeword |= getDibit (opts, state);
 
-  dibit = *dibit_p++;
-  if (opts->inverted_dmr == 1)
-      dibit = (dibit ^ 2);
+  dibit = getDibit (opts, state);
   bursttype = dibit;
 
-  dibit = *dibit_p++;
-  if (opts->inverted_dmr == 1)
-      dibit = (dibit ^ 2);
+  dibit = getDibit (opts, state);
   bursttype = ((bursttype << 2) | dibit);
   golay_codeword = ((golay_codeword << 4)|bursttype);
 
   // parity bit
-  //dibit_p++;
   golay_codeword <<= 2;
-  golay_codeword |= *dibit_p++;
+  golay_codeword |= getDibit (opts, state);
 
   // signaling data or sync
   for (i = 0; i < 24; i++) {
-      dibit = *dibit_p++;
-      if (opts->inverted_dmr == 1)
-          dibit = (dibit ^ 2);
+      dibit = getDibit (opts, state);
       sync[i] = (dibit | 1) + 48;
   }
   sync[24] = 0;
@@ -533,10 +516,10 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   }
 
   // CACH
-  skipDibit(opts, state, 12);
+  //skipDibit(opts, state, 12);
 
   // first half current slot
-  skipDibit (opts, state, 54);
+  //skipDibit (opts, state, 54);
 
   if ((bursttype == 0) || (bursttype == 1) || (bursttype == 2) || (bursttype == 3) || (bursttype == 6) || (bursttype == 7)) {
     for (i = 0; i < 96; i++) payload[i] = 0;
