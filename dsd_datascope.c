@@ -44,6 +44,8 @@ void print_datascope(dsd_state *state, int lidx, int lbuf2[25])
                     if (i == 0) {
                         if ((j == ((state->min) + 32768) / 1024) || (j == ((state->max) + 32768) / 1024)) {
                             buf[j+1] = '#';
+                        } else if ((j == ((state->lmid) + 32768) / 1024) || (j == ((state->umid) + 32768) / 1024)) { 
+                            buf[j+1] = '^';
                         } else if (j == (state->center + 32768) / 1024) {
                             buf[j+1] = '!';
                         } else {
