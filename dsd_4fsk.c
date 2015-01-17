@@ -10,6 +10,7 @@
 #define K_COARSE_FREQUENCY 0.00125f
 // internal fast loop (must be this high to acquire symbol sync)
 #define K_FINE_FREQUENCY 0.125f
+//#define K_FINE_FREQUENCY 0.0625f
 // tracking loop gain constant
 #define K_SYMBOL_SPREAD 0.0100f
 #define K_SYMBOL_TIMING 0.025f
@@ -130,7 +131,8 @@ getSymbol (dsd_opts *opts, dsd_state *state, int have_sync)
     ssize_t result = 0;
 
     // first we run through all provided data
-    for(i = 0; i < 10; i++) {
+    //for(i = 0; i < 10; i++) {
+    for(i = 0; i < 4800; i++) {
         float sample;
         short tmp;
 

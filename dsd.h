@@ -37,6 +37,8 @@
 #include "ReedSolomon.h"
 #define SAMPLE_RATE_IN 48000
 #define SAMPLE_RATE_OUT 8000
+#define FSK4_NTAPS  8
+#define FSK4_NSTEPS 128
 
 /*
  * global variables
@@ -66,18 +68,22 @@ typedef struct
   unsigned char frame_types; // 0 -> DMR, 1 -> DStar, 2 -> NXDN48, 3 -> NXDN96, 4 -> P25P1
   unsigned char inverted_dmr;
   unsigned char inverted_x2tdma;
-  unsigned int ssize;
   unsigned int msize;
-  unsigned int mod_threshold;
 } dsd_opts;
 
 typedef struct
 {
+  float d_history[FSK4_NTAPS+1];
+  unsigned int d_history_last;
+  float d_symbol_clock;
+  float d_symbol_spread;
+  float d_symbol_time;
+  float fine_frequency_correction;
+  float coarse_frequency_correction;
+
   int *dibit_buf;
   int *dibit_buf_p;
   int repeat;
-  //short *inbuffer;
-  //unsigned int inbuf_pos, inbuf_size;
   short inbuffer[4096];
   float inbuffer2[4096];
   unsigned int inbuf_pos;
@@ -96,7 +102,8 @@ typedef struct
   int maxref;
   int lastsample;
   int sbuf[128];
-  int sidx;
+  unsigned int sidx;
+  unsigned int ssize;
   int maxbuf[1024];
   int minbuf[1024];
   int midx;
@@ -243,7 +250,7 @@ void closeWavOutFile (dsd_opts *opts);
 void processFrame (dsd_opts * opts, dsd_state * state);
 void printFrameSync (dsd_opts * opts, dsd_state * state, char *frametype, int offset);
 int getFrameSync (dsd_opts * opts, dsd_state * state);
-void print_datascope(dsd_state *state, int lidx, int lbuf2[25]);
+void print_datascope(dsd_state *state, int *lbuf2, unsigned int lsize);
 void noCarrier (dsd_opts * opts, dsd_state * state);
 void cleanupAndExit (dsd_opts * opts, dsd_state * state);
 void sigfun (int sig);
@@ -260,7 +267,7 @@ void processDSTAR (dsd_opts * opts, dsd_state * state);
 void processDSTAR_HD (dsd_opts * opts, dsd_state * state);
 void process_p25_frame(dsd_opts *opts, dsd_state *state, unsigned char duid);
 float get_p25_ber_estimate (dsd_state* state);
-short dmr_filter(short sample);
-short nxdn_filter(short sample);
+float dmr_filter(float sample);
+float nxdn_filter(float sample);
 
 #endif // DSD_H

@@ -109,8 +109,6 @@ static inline void initOpts (dsd_opts * opts)
   //opts->mod_qpsk = 0;
   opts->inverted_dmr = 0;       // most transmitter + scanner + sound card combinations show non-inverted signals for this
   opts->inverted_x2tdma = 1;    // most transmitter + scanner + sound card combinations show inverted signals for this
-  opts->mod_threshold = 26;
-  opts->ssize = 36;
   opts->msize = 15;
 }
 
@@ -124,6 +122,8 @@ static void initState (dsd_state * state)
   state->repeat = 0;
   state->audio_out_temp_buf_p = state->audio_out_temp_buf;
   //state->wav_out_bytes = 0;
+  state->samplesPerSymbol = 10;
+  state->symbolCenter = 4;
   state->center = 0;
   state->jitter = -1;
   state->synctype = -1;
@@ -138,6 +138,16 @@ static void initState (dsd_state * state)
       state->sbuf[i] = 0;
   }
   state->sidx = 0;
+  state->ssize = 36;
+  state->d_history_last = 0;
+  state->d_symbol_clock = 0.0f;
+  state->d_symbol_spread = 2.0f; // nominal symbol spread of 2.0 gives outputs at -3, -1, +1, +3
+  state->d_symbol_time = (1.0f / (float)state->samplesPerSymbol);
+  state->fine_frequency_correction = 0.0f;
+  state->coarse_frequency_correction = 0.0f;
+  for (i = 0; i <= FSK4_NTAPS; i++) {
+      state->d_history[i] = 0.0f;
+  }
   for (i = 0; i < 1024; i++) {
       state->maxbuf[i] = 15000;
       state->minbuf[i] = -15000;
@@ -165,8 +175,6 @@ static void initState (dsd_state * state)
   state->aout_gain = 25;
   memset (state->aout_max_buf, 0, sizeof (float) * 200);
   state->aout_max_buf_idx = 0;
-  state->samplesPerSymbol = 10;
-  state->symbolCenter = 4;
   state->currentslot = 0;
   mbe_initMbeParms (&state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced);
 
@@ -349,13 +357,13 @@ main (int argc, char **argv)
           }
           break;
         case 'S':
-          opts.ssize = strtoul(optarg, NULL, 10);
-          if (opts.ssize > 128) {
-              opts.ssize = 128;
-          } else if (opts.ssize < 1) {
-              opts.ssize = 1;
+          state.ssize = strtoul(optarg, NULL, 10);
+          if (state.ssize > 128) {
+              state.ssize = 128;
+          } else if (state.ssize < 1) {
+              state.ssize = 1;
           }
-          printf ("Setting QPSK symbol buffer to %i\n", opts.ssize);
+          printf ("Setting QPSK symbol buffer to %i\n", state.ssize);
           break;
         default:
           usage ();
@@ -372,7 +380,7 @@ main (int argc, char **argv)
   } else {
     printf ("Audio In Device: %s\n", audio_in_dev);
   }
-  opts.audio_in_type |= 0x04;
+  //opts.audio_in_type |= 0x04;
 
   if (opts.datascope) {
     write(1, "\033[2J", 4);
