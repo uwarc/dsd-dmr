@@ -99,16 +99,24 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
   int mutecurrentslot = 0;
   unsigned char msMode = 0;
 
-  dibit_p = state->dibit_buf_p - 24;
+  dibit_p = state->dibit_buf_p - 144;
   for (j = 0; j < 6; j++) {
       // 2nd half of previous slot
       for (i = 0; i < 54; i++) {
-          dibit = getDibit (opts, state);
+          if (j > 0) {
+              dibit = getDibit (opts, state);
+          } else {
+              dibit = *dibit_p++;
+          }
       }
 
       // CACH
       for (i = 0; i < 12; i++) {
-        dibit = getDibit (opts, state);
+        if (j > 0) {
+          dibit = getDibit (opts, state);
+        } else {
+          dibit = *dibit_p++;
+        }
         cachbits[2*i] = (1 & (dibit >> 1));    // bit 1
         cachbits[2*i+1] = (1 & dibit);   // bit 0
       }
@@ -131,14 +139,22 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
 
       // current slot frame 1
       for (i = 0; i < 36; i++) {
-          dibit = getDibit (opts, state);
+          if (j > 0) {
+              dibit = getDibit (opts, state);
+          } else {
+              dibit = *dibit_p++;
+          }
           ambe_fr[rW[i]][rX[i]] = (1 & (dibit >> 1)); // bit 1
           ambe_fr[rY[i]][rZ[i]] = (1 & dibit);        // bit 0
       }
 
       // current slot frame 2 first half
       for (i = 0; i < 18; i++) {
-          dibit = getDibit (opts, state);
+          if (j > 0) {
+              dibit = getDibit (opts, state);
+          } else {
+              dibit = *dibit_p++;
+          }
           ambe_fr2[rW[i]][rX[i]] = (1 & (dibit >> 1));        // bit 1
           ambe_fr2[rY[i]][rZ[i]] = (1 & dibit);       // bit 0
       }
@@ -166,6 +182,7 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
           }
           // Non-Sync part of the superframe
 #if 0
+#if 0
           if (!doQR1676(&emb_field)) {
 #endif
               lcss = ((emb_field >> 10) & 3);
@@ -176,11 +193,10 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
 #if 0
           }
 #endif
+#endif
       } else { 
           for (i = 0; i < 24; i++) {
               dibit = *dibit_p++;
-              if (opts->inverted_dmr == 1)
-                  dibit = (dibit ^ 2);
               sync[i] = (dibit | 1) + 48;
           }
       }
@@ -275,6 +291,17 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
           } else {
               strcpy (state->slot0light, " SLOT0 ");
           }
+      }
+
+      if (j == 5) {
+          // 2nd half next slot
+          skipDibit (opts, state, 54);
+
+          // CACH
+          skipDibit (opts, state, 12);
+
+          // first half current slot
+          skipDibit (opts, state, 54);
       }
   }
 }

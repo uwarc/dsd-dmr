@@ -353,6 +353,7 @@ static unsigned int check_and_fix_reedsolomon_12_09_04(ReedSolomon *rs, unsigned
 
   for (i=0; i<255; i++) {
     input[i] = 0;
+    output[i] = 0;
   }
 
   for(i = 0; i < 12; i++) {
@@ -383,6 +384,7 @@ void
 processDMRdata (dsd_opts * opts, dsd_state * state)
 {
   int i, j, dibit;
+  int *dibit_p;
   char sync[25];
   unsigned char cach1bits[25];
   unsigned char cach1_hdr = 0, cach1_hdr_hamming = 0;
@@ -394,9 +396,17 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   unsigned char fid = 0;
   unsigned int print_burst = 1;
 
+  if (state->firstframe == 1) { // we don't know if anything received before the first sync after no carrier is valid
+    skipDibit(opts, state, 120);
+    state->firstframe = 0;
+  }
+
+  dibit_p = state->dibit_buf_p - 90;
+
   // CACH
   for (i = 0; i < 12; i++) {
-      dibit = getDibit (opts, state);
+      //dibit = getDibit (opts, state);
+      dibit = *dibit_p++;
       cach1bits[cach_deinterleave[2*i]] = (1 & (dibit >> 1));    // bit 1
       cach1bits[cach_deinterleave[2*i+1]] = (1 & dibit);   // bit 0
   }
@@ -419,30 +429,37 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
 
   // current slot
   for (i = 0; i < 49; i++) {
-      dibit = getDibit (opts, state);
+      //dibit = getDibit (opts, state);
+      dibit = *dibit_p++;
       infodata[2*i] = (1 & (dibit >> 1)); // bit 1
       infodata[2*i+1] = (1 & dibit);        // bit 0
   }
 
   // slot type
-  golay_codeword  = getDibit (opts, state);
+  //golay_codeword  = getDibit (opts, state);
+  //golay_codeword <<= 2;
+  //golay_codeword |= getDibit (opts, state);
+  golay_codeword  = *dibit_p++;
   golay_codeword <<= 2;
-  golay_codeword |= getDibit (opts, state);
+  golay_codeword |= *dibit_p++;
 
-  dibit = getDibit (opts, state);
+  //dibit = getDibit (opts, state);
+  dibit = *dibit_p++;
   bursttype = dibit;
 
-  dibit = getDibit (opts, state);
+  //dibit = getDibit (opts, state);
+  dibit = *dibit_p++;
   bursttype = ((bursttype << 2) | dibit);
   golay_codeword = ((golay_codeword << 4)|bursttype);
 
   // parity bit
   golay_codeword <<= 2;
-  golay_codeword |= getDibit (opts, state);
+  golay_codeword |= *dibit_p++;
+  //golay_codeword |= getDibit (opts, state);
 
   // signaling data or sync
   for (i = 0; i < 24; i++) {
-      dibit = getDibit (opts, state);
+      dibit = *dibit_p++;
       sync[i] = (dibit | 1) + 48;
   }
   sync[24] = 0;
@@ -486,10 +503,10 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   }
 
   // CACH
-  //skipDibit(opts, state, 12);
+  skipDibit(opts, state, 12);
 
   // first half current slot
-  //skipDibit (opts, state, 54);
+  skipDibit (opts, state, 54);
 
   if ((bursttype == 0) || (bursttype == 1) || (bursttype == 2) || (bursttype == 3) || (bursttype == 6) || (bursttype == 7)) {
     for (i = 0; i < 96; i++) payload[i] = 0;

@@ -79,11 +79,11 @@ processX2TDMAData (dsd_opts * opts, dsd_state * state)
   unsigned int bursttype = 0;
   unsigned int print_burst = 1;
 
-  dibit_p = state->dibit_buf_p - 24;
+  dibit_p = state->dibit_buf_p - 90;
 
   // CACH
   for (i = 0; i < 12; i++) {
-      dibit = getDibit (opts, state);
+      dibit = *dibit_p++;
       cachbits[2*i] = (1 & (dibit >> 1));    // bit 1
       cachbits[2*i+1] = (1 & dibit);   // bit 0
   }
@@ -105,9 +105,10 @@ processX2TDMAData (dsd_opts * opts, dsd_state * state)
   }
 
   // current slot
-  skipDibit (opts, state, 49);
+  dibit_p += 49;
 
   // slot type
+#if 0
   golay_codeword  = getDibit (opts, state);
   golay_codeword <<= 2;
   golay_codeword |= getDibit (opts, state);
@@ -122,12 +123,24 @@ processX2TDMAData (dsd_opts * opts, dsd_state * state)
   // parity bit
   golay_codeword <<= 2;
   golay_codeword |= getDibit (opts, state);
+#endif
+  golay_codeword  = *dibit_p++;
+  golay_codeword <<= 2;
+  golay_codeword |= *dibit_p++;
+
+  bursttype = *dibit_p++;
+
+  dibit = *dibit_p++;
+  bursttype = ((bursttype << 2) | dibit);
+  golay_codeword = ((golay_codeword << 4)|bursttype);
+
+  // parity bit
+  golay_codeword <<= 2;
+  golay_codeword |= *dibit_p++;
 
   // signaling data or sync
   for (i = 0; i < 24; i++) {
       dibit = *dibit_p++;
-      if (opts->inverted_x2tdma == 1)
-          dibit = (dibit ^ 2);
       sync[i] = (dibit | 1) + 48;
   }
   sync[24] = 0;
@@ -160,10 +173,7 @@ processX2TDMAData (dsd_opts * opts, dsd_state * state)
   }
 
   // current slot second half, cach, next slot 1st half
-  //skipDibit (opts, state, 115);
-
-  // current slot second half only!
-  skipDibit (opts, state, 49);
+  skipDibit (opts, state, 115);
 
   if (print_burst) { 
       int level = (int) state->max / 164;

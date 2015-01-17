@@ -24,7 +24,7 @@ invert_dibit(int dibit)
     return (dibit ^ 2);
 }
 
-static int digitize (dsd_opts* opts, dsd_state* state, int symbol)
+static int digitize (dsd_state* state, int symbol)
 {
   // determine dibit state
   if ((state->synctype == 6) || (state->synctype == 7) ||
@@ -38,17 +38,18 @@ static int digitize (dsd_opts* opts, dsd_state* state, int symbol)
       // 19 -D-STAR_HD
       int dibit;
       if (symbol > state->center) {
-        *state->dibit_buf_p++ = 1;
         dibit = 0;
       } else {
-        *state->dibit_buf_p++ = 3;
         dibit = 1;
       }
       if ((state->synctype & 1) == 1) {
         dibit ^= 1;
       }
+      *state->dibit_buf_p++ = dibit;
       return dibit;
   } else {
+      //  0 +P25p1
+      //  1 -P25p1
       //  2 +X2-TDMA (non inverted signal data frame)
       //  3 -X2-TDMA (inverted signal voice frame)
       //  4 +X2-TDMA (non inverted signal voice frame)
@@ -63,8 +64,7 @@ static int digitize (dsd_opts* opts, dsd_state* state, int symbol)
       // 17 -NXDN (inverted data frame)
       int dibit;
 
-      // Revert to the original approach: choose the symbol according to the regions delimited
-      // by center, umid and lmid
+      // Choose the symbol according to the regions delimited by center, umid and lmid
       if (symbol > state->center) {
           if (symbol > state->umid) {
               dibit = 1;               // +3
@@ -78,13 +78,12 @@ static int digitize (dsd_opts* opts, dsd_state* state, int symbol)
               dibit = 2;               // -1
           }
       }
-      // store non-inverted values in dibit_buf
-      *state->dibit_buf_p++ = dibit;
 
       if ((state->synctype & 1) == 1) { 
         dibit = invert_dibit(dibit);
       }
       state->last_dibit = dibit;
+      *state->dibit_buf_p++ = dibit;
       return dibit;
   }
 }
@@ -110,13 +109,13 @@ getDibit (dsd_opts* opts, dsd_state* state)
     int sbuf2[128];
     int i, lmin, lmax, lsum = 0;
 
-    for (i = 0; i < opts->ssize; i++) {
+    for (i = 0; i < state->ssize; i++) {
       sbuf2[i] = state->sbuf[i];
     }
-    Shellsort_int(sbuf2, opts->ssize);
+    Shellsort_int(sbuf2, state->ssize);
 
     lmin = (sbuf2[0] + sbuf2[1]) / 2;
-    lmax = (sbuf2[(opts->ssize - 1)] + sbuf2[(opts->ssize - 2)]) / 2;
+    lmax = (sbuf2[(state->ssize - 1)] + sbuf2[(state->ssize - 2)]) / 2;
     state->minbuf[state->midx] = lmin;
     state->maxbuf[state->midx] = lmax;
     if (state->midx == (opts->msize - 1)) {
@@ -148,16 +147,17 @@ getDibit (dsd_opts* opts, dsd_state* state)
 #endif
 
   // Increase sidx
-  if (state->sidx == (opts->ssize - 1)) {
+  if (state->sidx == (state->ssize - 1)) {
       state->sidx = 0;
   } else {
       state->sidx++;
   }
 
-  if (state->dibit_buf_p > state->dibit_buf + 48000)
-      state->dibit_buf_p = state->dibit_buf + 200;
+  if (state->dibit_buf_p > state->dibit_buf + 48000) {
+    state->dibit_buf_p = state->dibit_buf + 200;
+  }
 
-  dibit = digitize (opts, state, symbol);
+  dibit = digitize (state, symbol);
   return dibit;
 }
 
