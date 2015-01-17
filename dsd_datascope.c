@@ -16,57 +16,58 @@
  */
 
 #include "dsd.h"
-#define SCOPERATE 15
+#define SCOPERATE 1
 
-void print_datascope(dsd_state *state, int lidx, int lbuf2[25])
+static const char *modulations[3] = { "C4FM", "QPSK", "GFSK" };
+
+void print_datascope(dsd_state *state, int *lbuf2, unsigned int lsize)
 {
     static const char *separator = "+----------------------------------------------------------------+\n";
     int i, j, o;
     char spectrum[64];
-    if (lidx == 0) {
-        for (i = 0; i < 64; i++) {
-            spectrum[i] = 0;
-        }
-        for (i = 0; i < 24; i++) {
-            o = (lbuf2[i] + 32768) / 1024;
-            spectrum[o]++;
-        }
-        if (state->symbolcnt > (4800 / SCOPERATE)) {
-            state->symbolcnt = 0;
-            write(1, "\033[16A", 5);
-            printf ("\nDemod mode: %s, Min: %d, Max: %d, Center: %d, Jitter: %d, Symbol_Rate: %d\n",
-                    ((state->rf_mod == 2) ? "GFSK" : "C4FM"), state->min, state->max, state->center,
-                    state->jitter, state->samplesPerSymbol);
-            write(1, separator, 67);
-            for (i = 0; i < 10; i++) {
-                char buf[67];
-                for (j = 0; j < 64; j++) {
-                    if (i == 0) {
-                        if ((j == ((state->min) + 32768) / 1024) || (j == ((state->max) + 32768) / 1024)) {
-                            buf[j+1] = '#';
-                        } else if ((j == ((state->lmid) + 32768) / 1024) || (j == ((state->umid) + 32768) / 1024)) { 
-                            buf[j+1] = '^';
-                        } else if (j == (state->center + 32768) / 1024) {
-                            buf[j+1] = '!';
-                        } else {
-                            buf[j+1] = ((j == 32) ? '|' : ' ');
-                       }
+
+    for (i = 0; i < 64; i++) {
+        spectrum[i] = 0;
+    }
+    for (i = 0; i < lsize; i++) {
+        o = (lbuf2[i] + 32768) / 1024;
+        spectrum[o]++;
+    }
+    if (state->symbolcnt > (4800 / SCOPERATE)) {
+        state->symbolcnt = 0;
+        write(1, "\033[16A", 5);
+        printf ("\nDemod mode: %s, Min: %d, Max: %d, LMid: %d, UMid: %d, Center: %d, Jitter: %d, Symbol_Rate: %d\n",
+                modulations[state->rf_mod], state->min, state->max, state->lmid, state->umid, state->center,
+                state->jitter, state->samplesPerSymbol);
+        write(1, separator, 67);
+        for (i = 0; i < 10; i++) {
+            char buf[67];
+            for (j = 0; j < 64; j++) {
+                if (i == 0) {
+                    if ((j == ((state->min) + 32768) / 1024) || (j == ((state->max) + 32768) / 1024)) {
+                        buf[j+1] = '#';
+                    } else if ((j == ((state->lmid) + 32768) / 1024) || (j == ((state->umid) + 32768) / 1024)) { 
+                        buf[j+1] = '^';
+                    } else if (j == (state->center + 32768) / 1024) {
+                        buf[j+1] = '!';
                     } else {
-                        if (spectrum[j] > 9 - i) {
-                            buf[j+1] = '*';
-                        } else {
-                            buf[j+1] = ((j == 32) ? '|' : ' ');
-                        }
+                        buf[j+1] = ((j == 32) ? '|' : ' ');
+                   }
+                } else {
+                    if (spectrum[j] > 9 - i) {
+                        buf[j+1] = '*';
+                    } else {
+                        buf[j+1] = ((j == 32) ? '|' : ' ');
                     }
                 }
-                buf[0] = '|';
-                buf[64] = '|';
-                buf[65] = '\n';
-                buf[66] = '\0';
-                write(1, buf, 66);
             }
-            write(1, separator, 67);
+            buf[0] = '|';
+            buf[64] = '|';
+            buf[65] = '\n';
+            buf[66] = '\0';
+            write(1, buf, 66);
         }
+        write(1, separator, 67);
     }
 }
 
