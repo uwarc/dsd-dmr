@@ -12,7 +12,6 @@
 #define NZEROS 80
 static float xv[NZEROS+1];
 
-#if 0
 float ngain = 0.101333437f;
 static float xcoeffs[] = {
     +0.0273676736, +0.0190682959, +0.0070661879, -0.0075385898,
@@ -37,8 +36,8 @@ static float xcoeffs[] = {
     -0.0231737159, -0.0075385898, +0.0070661879, +0.0190682959,
     +0.0273676736,
 };
-#endif
 
+#if 0
 float ngain = 0.101336899f;
 static float xcoeffs[] = {
     +0.0275474470, +0.0192252172, +0.0071768951, -0.0074941018,
@@ -63,6 +62,7 @@ static float xcoeffs[] = {
     -0.0232091970, -0.0074941018, +0.0071768951, +0.0192252172,
     +0.0275474470,
 };
+#endif
 
 // NXDN filter
 #define NXZEROS 134
