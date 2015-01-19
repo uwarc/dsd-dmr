@@ -19,9 +19,9 @@ static unsigned int Hamming15113Gen[11] = {
     0x400f, 0x200e, 0x100d, 0x080c, 0x040b, 0x020a, 0x0109, 0x0087, 0x0046, 0x0025, 0x0013
 };
 
-unsigned int p25_hamming15_11_3_decode(unsigned int *codeword)
+void p25_hamming15_11_3_decode(unsigned int *codeword)
 {
-  unsigned int i, errs = 0, block = *codeword, ecc = 0, syndrome;
+  unsigned int i, block = *codeword, ecc = 0, syndrome;
 
   for(i = 0; i < 11; i++) {
       if((block & Hamming15113Gen[i]) > 0xf)
@@ -30,12 +30,10 @@ unsigned int p25_hamming15_11_3_decode(unsigned int *codeword)
   syndrome = ecc ^ block;
 
   if (syndrome > 0) {
-      errs++;
       block ^= (1U << (syndrome - 1));
   }
 
   *codeword = (block >> 4);
-  return (errs);
 }
 
 static unsigned int mbe_golay2312 (unsigned int in, unsigned int *out)
@@ -108,7 +106,7 @@ static void mbe_demodulateImbe7200x4400Data (char imbe[8][23])
 
 static int mbe_eccImbe7200x4400Data (char imbe_fr[8][23], char *imbe_d)
 {
-  int i, j, errs = 0;
+  int i, j = 0, errs = 0;
   unsigned int hin, gin, gout, block;
   char *imbe = imbe_d;
 
@@ -135,8 +133,9 @@ static int mbe_eccImbe7200x4400Data (char imbe_fr[8][23], char *imbe_d)
           hin <<= 1;
           hin |= imbe_fr[i][14-j];
       }
-      errs += p25_hamming15_11_3_decode(&hin);
       block = hin;
+      p25_hamming15_11_3_decode(&block);
+      errs += ((hin >> 4) != block);
       for (j = 14; j >= 4; j--) {
           *imbe++ = ((block & 0x0400) >> 10);
           block = block << 1;
@@ -222,7 +221,7 @@ read_dibit (dsd_opts* opts, dsd_state* state, unsigned char* output, unsigned in
 {
     unsigned int i;
 
-    for (i = 0; i < count; i += 2) {
+    for (i = 0; i < count; i++) {
         int dibit;
 
         if (*status_count == 35) {
@@ -235,9 +234,28 @@ read_dibit (dsd_opts* opts, dsd_state* state, unsigned char* output, unsigned in
             (*status_count)++;
         }
 
-        dibit = getDibit(opts, state);
-        output[i] = (1 & (dibit >> 1));      // bit 1
-        output[i+1] = (1 & dibit);             // bit 0
+        output[i] = getDibit(opts, state);
+    }
+}
+
+void
+skip_dibit(dsd_opts* opts, dsd_state* state, unsigned int count, int* status_count)
+{
+    unsigned int i;
+
+    for (i = 0; i < count; i++) {
+
+        if (*status_count == 35) {
+            // Status bits now
+            // TODO: do something useful with the status bits...
+            //int status = getDibit (opts, state);
+            getDibit (opts, state);
+            *status_count = 1;
+        } else {
+            (*status_count)++;
+        }
+
+        getDibit(opts, state);
     }
 }
 
@@ -286,10 +304,10 @@ static void
 read_and_correct_hdu_hex_word (dsd_opts* opts, dsd_state* state, unsigned char* hex, int* status_count)
 {
   unsigned int corrected_hexword = 0;
-  unsigned char hex_and_parity[9];
+  unsigned char hex_and_parity[18];
 
   // read both the hex word and the Golay(23, 12) parity information
-  read_dibit(opts, state, hex_and_parity, 18, status_count);
+  read_dibit(opts, state, hex_and_parity, 9, status_count);
 
   // Use the Golay23 FEC to correct it.
   corrected_hexword = correct_hex_word(state, hex_and_parity, 9);
@@ -297,105 +315,6 @@ read_and_correct_hdu_hex_word (dsd_opts* opts, dsd_state* state, unsigned char* 
   // codeword is now hopefully fixed
   // put it back into our hex format
   hex_to_bin(hex, corrected_hexword);
-}
-
-static int ReedSolomon_36_20_17_decode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* hex_parity)
-{
-    unsigned char input[63];
-    unsigned char output[63];
-    unsigned int i, irrecoverable_errors;
-
-    // First put the parity data, 16 hex words
-    for(i=0; i<16; i++) {
-        input[i] = get_uint(hex_parity + i*6, 6);
-    }
-
-    // Then the 20 hex words of data
-    for(i=16; i<16+20; i++) {
-        input[i] = get_uint(hex_data + (i-16)*6, 6);
-    }
-
-    // Fill up with zeros to complete the 47 expected hex words of data
-    for(i=16+20; i<63; i++) {
-        input[i] = 0;
-    }
-
-    // Now we can call decode on the base class
-    irrecoverable_errors = rs6_decode(rs, input, output);
-
-    // Convert it back to binary and put it into hex_data. If decode failed we should have
-    // the input unchanged.
-    for(i=16; i<16+20; i++) {
-        hex_to_bin(hex_data + (i-16)*6, output[i]);
-    }
-
-    return irrecoverable_errors;
-}
-
-static int ReedSolomon_24_12_13_decode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* hex_parity)
-{
-    unsigned char input[63];
-    unsigned char output[63];
-    unsigned int i, irrecoverable_errors;
-
-    // First put the parity data, 12 hex words
-    for(i=0; i<12; i++) {
-        input[i] = get_uint(hex_parity + i*6, 6);
-    }
-
-    // Then the 12 hex words of data
-    for(i=12; i<12+12; i++) {
-        input[i] = get_uint(hex_data + (i-12)*6, 6);
-    }
-
-    // Fill up with zeros to complete the 51 expected hex words of data
-    for(i=12+12; i<63; i++) {
-        input[i] = 0;
-    }
-
-    // Now we can call decode on the base class
-    irrecoverable_errors = rs6_decode(rs, input, output);
-
-    // Convert it back to binary and put it into hex_data. If decode failed we should have
-    // the input unchanged.
-    for(i=12; i<12+12; i++) {
-        hex_to_bin(hex_data + (i-12)*6, output[i]);
-    }
-
-    return irrecoverable_errors;
-}
-
-static int ReedSolomon_24_16_09_decode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* hex_parity)
-{
-    unsigned char input[63];
-    unsigned char output[63];
-    unsigned int i, irrecoverable_errors;
-
-    // First put the parity data, 8 hex words
-    for(i=0; i<8; i++) {
-        input[i] = get_uint(hex_parity + i*6, 6);
-    }
-
-    // Then the 16 hex words of data
-    for(i=8; i<8+16; i++) {
-        input[i] = get_uint(hex_data + (i-8)*6, 6);
-    }
-
-    // Fill up with zeros to complete the 55 expected hex words of data
-    for(i=8+16; i<63; i++) {
-        input[i] = 0;
-    }
-
-    // Now we can call decode on the base class
-    irrecoverable_errors = rs6_decode(rs, input, output);
-
-    // Convert it back to binary and put it into hex_data. If decode failed we should have
-    // the input unchanged.
-    for(i=8; i<8+16; i++) {
-        hex_to_bin(hex_data + (i-8)*6, output[i]);
-    }
-
-    return irrecoverable_errors;
 }
 
 static void update_p25_error_stats (dsd_state* state, unsigned int nbits, unsigned int n_errs)
@@ -461,24 +380,24 @@ processHDU(dsd_opts* opts, dsd_state* state)
 #endif
 
   // Now put the corrected data on the DSD structures
-  mfid = get_uint(hex_data[7], 6);
+  mfid = get_uint(hex_data[12], 6);
   mfid <<= 6;
-  mfid |= ((hex_data[6][0] << 1) | (hex_data[6][1] << 0));
+  mfid |= ((hex_data[13][0] << 1) | (hex_data[13][1] << 0));
 
   // The important algorithm ID. This indicates whether the data is encrypted,
   // and if so what is the encryption algorithm used.
   // A code 0x80 here means that the data is unencrypted.
-  algid  = (get_uint(hex_data[6]+2, 4) << 4);
-  algid |= (get_uint(hex_data[5], 4) << 0);
+  algid  = (get_uint(hex_data[13]+2, 4) << 4);
+  algid |= (get_uint(hex_data[14], 4) << 0);
 
   // The encryption key ID
-  kid = ((hex_data[5][4] << 1) | (hex_data[5][5] << 0));
+  kid = ((hex_data[14][4] << 1) | (hex_data[14][5] << 0));
   kid <<= 6;
-  kid |= get_uint(hex_data[4], 6);
+  kid |= get_uint(hex_data[15], 6);
   kid <<= 6;
-  kid |= get_uint(hex_data[3], 6);
+  kid |= get_uint(hex_data[16], 6);
   kid <<= 2;
-  kid |= ((hex_data[2][0] << 1) | (hex_data[2][1] << 0));
+  kid |= ((hex_data[17][0] << 1) | (hex_data[17][1] << 0));
   state->p25kid = kid;
 
   skipDibit (opts, state, 6);
@@ -486,12 +405,12 @@ processHDU(dsd_opts* opts, dsd_state* state)
   //TODO: Do something useful with the status bits...
 
   if ((mfid == 144) || (mfid == 9)) { // FIXME: only one of these is correct.
-    talkgroup  = (get_uint(hex_data[1], 6) << 6);
-    talkgroup |= get_uint(hex_data[0], 6);
+    talkgroup  = (get_uint(hex_data[18], 6) << 6);
+    talkgroup |= get_uint(hex_data[19], 6);
   } else {
-    talkgroup  = (get_uint(hex_data[2]+2, 4) << 10);
-    talkgroup |= (get_uint(hex_data[1], 6) << 6);
-    talkgroup |= get_uint(hex_data[0], 6);
+    talkgroup  = (get_uint(hex_data[17]+2, 4) << 10);
+    talkgroup |= (get_uint(hex_data[18], 6) << 6);
+    talkgroup |= get_uint(hex_data[19], 6);
   }
 
   state->talkgroup = talkgroup;
@@ -506,7 +425,7 @@ processHDU(dsd_opts* opts, dsd_state* state)
 
   if (opts->verbose > 2) {
     mi[24] = '\0';
-    hexdump_p25_packet(hex_data, 8, 12, mi);
+    hexdump_p25_packet(hex_data, 0, 12, mi);
     printf ("mi: %s\n", mi);
   }
 }
@@ -514,36 +433,25 @@ processHDU(dsd_opts* opts, dsd_state* state)
 void
 read_and_correct_hex_word (dsd_opts* opts, dsd_state* state, unsigned char* hex, int* status_count)
 {
-  unsigned char parity[4];
-  unsigned int i, value = 0, error_count;
+  unsigned char hex_and_parity[10];
+  unsigned int i, value_in = 0, value = 0;
 
-  // Read the hex word
-  read_dibit(opts, state, hex, 6, status_count);
-
-  // Read the parity
-  read_dibit(opts, state, parity, 4, status_count);
+  // Read the hexword and parity
+  read_dibit(opts, state, parity, 10, status_count);
 
   // Use Hamming to error correct the hex word
   // in the bitset 9 is the left-most and 0 is the right-most
-  for (i=0; i<6; i++) {
-      value <<= 1;
-      value |= hex[i];
+  for (i=0; i<5; i++) {
+      value_in <<= 2;
+      value_in |= hex_and_parity[i];
   }
-  for (i=0; i<4; i++) {
-      value <<= 1;
-      value |= parity[i];
-  }
-  error_count = p25_hamming15_11_3_decode(&value);
-  value &= 0x3f;
+  value = value_in;
+  p25_hamming15_11_3_decode(&value);
+  value &= 0x3f; value_in >>= 4; value_in &= 0x3f; 
 
-  hex[5] = ((value >> 0) & 1);
-  hex[4] = ((value >> 1) & 1);
-  hex[3] = ((value >> 2) & 1);
-  hex[2] = ((value >> 3) & 1);
-  hex[1] = ((value >> 4) & 1);
-  hex[0] = ((value >> 5) & 1);
+  hex_to_bin(hex, value);
 
-  if (error_count > 0) {
+  if (value != value_in) {
       state->debug_header_errors++;
   }
 }
@@ -577,28 +485,28 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 2
-  read_and_correct_hex_word (opts, state, &(hex_data[11][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[10][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 9][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 8][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[ 0][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[ 1][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[ 2][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[ 3][0]), &status_count);
 
   // IMBE 3
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 3
-  read_and_correct_hex_word (opts, state, &(hex_data[ 7][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 6][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 5][0]), &status_count);
   read_and_correct_hex_word (opts, state, &(hex_data[ 4][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[ 5][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[ 6][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[ 7][0]), &status_count);
 
   // IMBE 4
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 4
-  read_and_correct_hex_word (opts, state, &(hex_data[ 3][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 2][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 1][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 0][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[ 8][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[ 9][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[10][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[11][0]), &status_count);
 
   // IMBE 5
   process_IMBE (opts, state, &status_count);
@@ -632,23 +540,19 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
 
   // Read data after IMBE 8: LSD (low speed data)
   {
-    unsigned char lsd[8], cyclic_parity[8];
+    unsigned char lsd[8];
 
-    for (i=0; i<=6; i+=2) {
-        read_dibit(opts, state, lsd+i, 2, &status_count);
-    }
-    for (i=0; i<=6; i+=2) {
-        read_dibit(opts, state, cyclic_parity+i, 2, &status_count);
-    }
-    lsd1 = get_uint(lsd, 8);
+    read_dibit(opts, state, lsd, 4, &status_count);
+    skip_dibit(opts, state, 4, &status_count);
+    read_dibit(opts, state, lsd+4, 4, &status_count);
+    skip_dibit(opts, state, 4, &status_count);
 
-    for (i=0; i<=6; i+=2) {
-        read_dibit(opts, state, lsd+i, 2, &status_count);
+    for (i=0; i<4; i++) {
+      lsd1 <<= 2;
+      lsd2 <<= 2;
+      lsd1 |= lsd[i];
+      lsd2 |= lsd[i+4];
     }
-    for (i=0; i<=6; i+=2) {
-        read_dibit(opts, state, cyclic_parity+i, 2, &status_count);
-    }
-    lsd2 = get_uint(lsd, 8);
 
     // TODO: error correction of the LSD bytes...
     // TODO: do something useful with the LSD bytes...
@@ -683,12 +587,12 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   }
 #endif
 
-  lcformat  = (get_uint(hex_data[11], 6) << 6);
-  lcformat |= ((hex_data[10][0] << 1) | (hex_data[10][1] << 0));
-  mfid  = ((get_uint(hex_data[10]+2, 4) << 4) | (get_uint(hex_data[9], 4) << 0));
-  hexdump_p25_packet(hex_data, 0, 9, lcinfo);
+  lcformat  = (get_uint(hex_data[0], 6) << 6);
+  lcformat |= ((hex_data[1][0] << 1) | (hex_data[1][1] << 0));
+  mfid  = ((get_uint(hex_data[1]+2, 4) << 4) | (get_uint(hex_data[2], 4) << 0));
+  hexdump_p25_packet(hex_data, 3, 9, lcinfo);
   lcinfo[18] = '0';
-  lcinfo[19] = (((hex_data[9][5] << 1) | (hex_data[9][4] << 0)) + 0x30);
+  lcinfo[19] = (((hex_data[2][5] << 1) | (hex_data[2][4] << 0)) + 0x30);
   lcinfo[20] = '\0';
   if (opts->verbose > 0) {
       printf ("mfid: %u, lcformat: 0x%02x, lcinfo: %s\n", mfid, lcformat, lcinfo);
@@ -724,37 +628,37 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 2
-  read_and_correct_hex_word (opts, state, &(hex_data[15][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[14][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[13][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[12][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[0][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[1][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[2][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[3][0]), &status_count);
 
   // IMBE 3
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 3
-  read_and_correct_hex_word (opts, state, &(hex_data[11][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[10][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 9][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 8][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[4][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[5][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[6][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[7][0]), &status_count);
 
   // IMBE 4
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 4
-  read_and_correct_hex_word (opts, state, &(hex_data[ 7][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 6][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 5][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 4][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[8][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[9][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[10][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[11][0]), &status_count);
 
   // IMBE 5
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 5
-  read_and_correct_hex_word (opts, state, &(hex_data[ 3][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 2][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 1][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 0][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[12][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[13][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[14][0]), &status_count);
+  read_and_correct_hex_word (opts, state, &(hex_data[15][0]), &status_count);
 
   // IMBE 6
   process_IMBE (opts, state, &status_count);
@@ -779,23 +683,19 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
 
   // Read data after IMBE 8: LSD (low speed data)
   {
-    unsigned char lsd[8], cyclic_parity[8];
+    unsigned char lsd[8];
 
-    for (i=0; i<=6; i+=2) {
-        read_dibit(opts, state, lsd+i, 2, &status_count);
-    }
-    for (i=0; i<=6; i+=2) {
-        read_dibit(opts, state, cyclic_parity+i, 2, &status_count);
-    }
-    lsd1 = get_uint(lsd, 8);
+    read_dibit(opts, state, lsd, 4, &status_count);
+    skip_dibit(opts, state, 4, &status_count);
+    read_dibit(opts, state, lsd+4, 4, &status_count);
+    skip_dibit(opts, state, 4, &status_count);
 
-    for (i=0; i<=6; i+=2) {
-        read_dibit(opts, state, lsd+i, 2, &status_count);
+    for (i=0; i<4; i++) {
+      lsd1 <<= 2;
+      lsd2 <<= 2;
+      lsd1 |= lsd[i];
+      lsd2 |= lsd[i+4];
     }
-    for (i=0; i<=6; i+=2) {
-        read_dibit(opts, state, cyclic_parity+i, 2, &status_count);
-    }
-    lsd2 = get_uint(lsd, 8);
 
     // TODO: error correction of the LSD bytes...
     // TODO: do something useful with the LSD bytes...
@@ -830,22 +730,22 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   }
 #endif
 
-  algid  = (get_uint(hex_data[3], 6) << 6);
-  algid |= (get_uint(hex_data[2], 2) << 0);
+  algid  = (get_uint(hex_data[12], 6) << 6);
+  algid |= (get_uint(hex_data[13], 2) << 0);
 
   // The encryption key ID
-  kid = get_uint(hex_data[2]+2, 4);
+  kid = get_uint(hex_data[13]+2, 4);
   kid <<= 6;
-  kid |= get_uint(hex_data[1], 6);
+  kid |= get_uint(hex_data[14], 6);
   kid <<= 6;
-  kid |= get_uint(hex_data[0], 6);
+  kid |= get_uint(hex_data[15], 6);
   if (opts->p25enc == 1) {
       printf ("algid: 0x%02x kid: 0x%04x\n", algid, kid);
   }
 
   if (opts->verbose > 2) {
     mi[24] = '\0';
-    hexdump_p25_packet(hex_data, 4, 16, mi);
+    hexdump_p25_packet(hex_data, 0, 12, mi);
     printf ("mi: %s\n", mi);
   }
 }
@@ -862,7 +762,7 @@ processTDU (dsd_opts* opts, dsd_state* state)
     status_count = 21;
 
     // Next 14 dibits should be zeros
-    read_dibit(opts, state, zeroes, 28, &status_count);
+    skip_dibit(opts, state, 14, &status_count);
 
     // Next we should find an status dibit
     if (status_count != 35) {
@@ -913,7 +813,7 @@ processTDULC (dsd_opts* opts, dsd_state* state)
 
   for (j = 0; j < 6; j++) {
       // read both the hex word and the Golay(23, 12) parity information
-      read_dibit(opts, state, hex_and_parity, 24, &status_count);
+      read_dibit(opts, state, hex_and_parity, 12, &status_count);
 
       // Use the Golay23 FEC to correct it.
       corrected_hexword = correct_hex_word(state, hex_and_parity, 12);
@@ -927,7 +827,7 @@ processTDULC (dsd_opts* opts, dsd_state* state)
 
   for (j = 0; j < 6; j++) {
       // read both the hex word and the Golay(23, 12) parity information
-      read_dibit(opts, state, hex_and_parity, 24, &status_count);
+      read_dibit(opts, state, hex_and_parity, 12, &status_count);
 
       // Use the Golay23 FEC to correct it.
       corrected_hexword = correct_hex_word(state, hex_and_parity, 12);
@@ -969,7 +869,7 @@ processTDULC (dsd_opts* opts, dsd_state* state)
 #endif
 
   // Next 10 dibits should be zeros
-  read_dibit(opts, state, zeroes, 20, &status_count);
+  skip_dibit(opts, state, 10, &status_count);
 
   // Next we should find an status dibit
   if (status_count != 35) {

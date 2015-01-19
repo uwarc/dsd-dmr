@@ -131,6 +131,31 @@ int ReedSolomon_24_16_09_decode(ReedSolomon *rs, unsigned char* hex_data, unsign
     return irrecoverable_errors;
 }
 
+void ReedSolomon_24_12_13_encode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* out_hex_parity)
+{
+    unsigned char input[63];
+    unsigned char output[63];
+    unsigned int i;
+
+    // Put the 12 hex words of data
+    for(i=0; i<12; i++) {
+        input[i] = get_uint(hex_data + i*6, 6);
+    }
+
+    // Fill up with zeros to complete the 51 expected hex words of data
+    for(i=12; i<51; i++) {
+        input[i] = 0;
+    }
+
+    // Now we can call encode on the base class
+    rs6_encode(rs, input, output);
+
+    // Convert it back to binary form and put it into the parity
+    for(i=0; i<12; i++) {
+        hex_to_bin(out_hex_parity + i*6, output[i]);
+    }
+}
+
 int ReedSolomon_24_12_13_decode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* hex_parity)
 {
     unsigned char input[63];
@@ -162,30 +187,5 @@ int ReedSolomon_24_12_13_decode(ReedSolomon *rs, unsigned char* hex_data, unsign
     }
 
     return irrecoverable_errors;
-}
-
-void ReedSolomon_24_12_13_encode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* out_hex_parity)
-{
-    unsigned char input[63];
-    unsigned char output[63];
-    unsigned int i;
-
-    // Put the 12 hex words of data
-    for(i=0; i<12; i++) {
-        input[i] = get_uint(hex_data + i*6, 6);
-    }
-
-    // Fill up with zeros to complete the 51 expected hex words of data
-    for(i=12; i<51; i++) {
-        input[i] = 0;
-    }
-
-    // Now we can call encode on the base class
-    rs6_encode(rs, input, output);
-
-    // Convert it back to binary form and put it into the parity
-    for(i=0; i<12; i++) {
-        hex_to_bin(out_hex_parity + i*6, output[i]);
-    }
 }
 
