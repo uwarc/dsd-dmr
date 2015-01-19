@@ -6,8 +6,6 @@
 #define FSK4_MAX(a,b) ((a) > (b) ? (a) : (b))
 #define FSK4_MIN(a,b) ((a) > (b) ? (b) : (a))
 
-// time constant for coarse tracking loop
-#define K_COARSE_FREQUENCY 0.00125f
 // internal fast loop (must be this high to acquire symbol sync)
 #define K_FINE_FREQUENCY 0.125f
 //#define K_FINE_FREQUENCY 0.0625f
@@ -40,13 +38,10 @@ unsigned int fsk4_tracking_loop_mmse(dsd_state *state, float input, float *outpu
 	
 #if 0
 	int imu = FSK4_MIN(lrintf((FSK4_NSTEPS * (state->d_symbol_clock / state->d_symbol_time))), FSK4_NSTEPS - 1);
-	int imu_p1 = imu + 1;
 #else
 	int imu = lrintf(FSK4_NSTEPS * ((state->d_symbol_clock / state->d_symbol_time)));
-	int imu_p1 = imu + 1;
 	if (imu >= FSK4_NSTEPS) { 
 	  imu = FSK4_NSTEPS - 1;
-	  imu_p1 = FSK4_NSTEPS;
 	}
 #endif
 	
@@ -55,7 +50,7 @@ unsigned int fsk4_tracking_loop_mmse(dsd_state *state, float input, float *outpu
 	float interp_p1 = 0.0;
 	for(i = 0, j = state->d_history_last; i < FSK4_NTAPS; ++i) {
 	  interp += TAPS[imu][i] * state->d_history[j];
-	  interp_p1 += TAPS[imu_p1][i] * state->d_history[j];
+	  interp_p1 += TAPS[imu+1][i] * state->d_history[j];
 	  j = (j + 1) % FSK4_NTAPS;
 	}
 #else
@@ -63,8 +58,8 @@ unsigned int fsk4_tracking_loop_mmse(dsd_state *state, float input, float *outpu
 	float interp = 0.0;
 	float interp_p1 = 0.0;
 	for(i=0; i<FSK4_NTAPS; i++) {
-	    interp    +=  TAPS[imu   ][i] * state->d_history[j];
-	    interp_p1 +=  TAPS[imu_p1][i] * state->d_history[j];
+	    interp    +=  TAPS[imu  ][i] * state->d_history[j];
+	    interp_p1 +=  TAPS[imu+1][i] * state->d_history[j];
 	    j = (j+1) % FSK4_NTAPS;
     }
 #endif
@@ -111,10 +106,6 @@ unsigned int fsk4_tracking_loop_mmse(dsd_state *state, float input, float *outpu
 	// of nominal 2.0
 	state->d_symbol_spread = FSK4_MAX(state->d_symbol_spread, SYMBOL_SPREAD_MIN);
 	state->d_symbol_spread = FSK4_MIN(state->d_symbol_spread, SYMBOL_SPREAD_MAX);
-	
-	// coarse tracking loop: for eventually frequency shift
-	// request generation
-	state->coarse_frequency_correction += ((state->fine_frequency_correction - state->coarse_frequency_correction) * K_COARSE_FREQUENCY);
 	
 	// fine loop 
 	state->fine_frequency_correction += (symbol_error * K_FINE_FREQUENCY);
