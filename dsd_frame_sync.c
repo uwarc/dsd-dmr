@@ -89,7 +89,6 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
   lmax = 0;
   lidx = 0;
   lastt = 0;
-  state->numflips = 0;
 
   while (sync == 0) {
       t++;
@@ -111,12 +110,7 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
 
       if (lastt == 23) {
           lastt = 0;
-          if (state->numflips > 18) {
-                state->rf_mod = 2;
-          } else {
-                state->rf_mod = 0;
-          }
-          state->numflips = 0;
+          state->rf_mod = 2;
       } else {
           lastt++;
       }
