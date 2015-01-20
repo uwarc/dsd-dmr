@@ -176,6 +176,9 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             if (opts->inverted_dmr == 0) {
                 // data frame
                 strcpy (state->ftype, " +DMR      ");
+                if (state->lastsynctype != 10) {
+                    state->firstframe = 1;
+                }
                 state->lastsynctype = 10;
             } else {
                 // inverted voice frame
@@ -203,6 +206,9 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             } else {
                 // inverted data frame
                 strcpy (state->ftype, " -DMR      ");
+                if (state->lastsynctype != 13) {
+                    state->firstframe = 1;
+                }
                 state->lastsynctype = 13;
             }
             return state->lastsynctype;
