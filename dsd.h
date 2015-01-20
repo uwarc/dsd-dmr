@@ -234,7 +234,7 @@ get_uint(unsigned char *payload, unsigned int bits)
 void Golay23_Correct(unsigned int *block);
 unsigned int Golay23_Encode(unsigned int cw);
 void Hamming15_11_3_Correct(unsigned int *codeword);
-unsigned int p25_hamming15_11_3_decode(unsigned int *codeword);
+void p25_hamming15_11_3_decode(unsigned int *codeword);
 
 int getDibit (dsd_opts * opts, dsd_state * state);
 void skipDibit (dsd_opts * opts, dsd_state * state, int count);
@@ -269,5 +269,12 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state, unsigned char duid);
 float get_p25_ber_estimate (dsd_state* state);
 float dmr_filter(float sample);
 float nxdn_filter(float sample);
+
+void ReedSolomon_36_20_17_encode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* out_hex_parity);
+int ReedSolomon_36_20_17_decode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* hex_parity);
+void ReedSolomon_24_16_09_encode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* out_hex_parity);
+int ReedSolomon_24_16_09_decode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* hex_parity);
+void ReedSolomon_24_12_13_encode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* out_hex_parity);
+int ReedSolomon_24_12_13_decode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* hex_parity);
 
 #endif // DSD_H
