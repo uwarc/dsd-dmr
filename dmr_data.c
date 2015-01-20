@@ -397,7 +397,7 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   unsigned int print_burst = 1;
 
   if (state->firstframe == 1) { // we don't know if anything received before the first sync after no carrier is valid
-    skipDibit(opts, state, 120);
+    //skipDibit(opts, state, 120);
     state->firstframe = 0;
   }
 
