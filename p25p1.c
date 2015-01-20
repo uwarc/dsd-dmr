@@ -347,10 +347,8 @@ processHDU(dsd_opts* opts, dsd_state* state)
   unsigned char algid = 0;
   unsigned short kid = 0;
   unsigned int talkgroup = 0;
-  unsigned int irrecoverable_errors = 0;
   int status_count;
   unsigned char hex_data[20][6];    // Data in hex-words (6 bit words). A total of 20 hex words.
-  unsigned char hex_parity[16][6];  // Parity of the data, again in hex-word format. A total of 16 parity hex words.
   char mi[25];
 
   // we skip the status dibits that occur every 36 symbols
@@ -364,20 +362,7 @@ processHDU(dsd_opts* opts, dsd_state* state)
   }
 
   // Read the 16 parity hex word. These are used to FEC the 20 hex words using Reed-Solomon.
-  for (i=15; i>=0; i--) {
-      read_and_correct_hdu_hex_word (opts, state, hex_parity[i], &status_count);
-  }
-
-  // Use the Reed-Solomon algorithm to correct the data. hex_data is modified in place
-#ifndef NO_REEDSOLOMON
-  irrecoverable_errors = ReedSolomon_36_20_17_decode(&state->ReedSolomon_36_20_17,
-                                                     (unsigned char*)hex_data,
-                                                     (unsigned char*)hex_parity);
-  if (irrecoverable_errors != 0) {
-      state->debug_header_critical_errors += irrecoverable_errors;
-      update_p25_error_stats(state, 20*6+16*6, 9*4);
-  }
-#endif
+  skip_dibit(opts, state, 9*16, &status_count);
 
   // Now put the corrected data on the DSD structures
   mfid = get_uint(hex_data[12], 6);
@@ -437,7 +422,7 @@ read_and_correct_hex_word (dsd_opts* opts, dsd_state* state, unsigned char* hex,
   unsigned int i, value_in = 0, value = 0;
 
   // Read the hexword and parity
-  read_dibit(opts, state, parity, 10, status_count);
+  read_dibit(opts, state, parity, 5, status_count);
 
   // Use Hamming to error correct the hex word
   // in the bitset 9 is the left-most and 0 is the right-most
@@ -465,9 +450,7 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   unsigned char lsd1 = 0, lsd2 = 0;
   char lcinfo[21];
   unsigned char hex_data[12][6];    // Data in hex-words (6 bit words). A total of 12 hex words.
-  unsigned char hex_parity[12][6];  // Parity of the data, again in hex-word format. A total of 12 parity hex words.
   int status_count;
-  int irrecoverable_errors;
 
   // we skip the status dibits that occur every 36 symbols
   // the first IMBE frame starts 14 symbols before next status
@@ -512,28 +495,19 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 5
-  read_and_correct_hex_word (opts, state, &(hex_parity[11][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_parity[10][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 9][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 8][0]), &status_count);
+  skip_dibit (opts, state, 20, &status_count);
 
   // IMBE 6
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 6
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 7][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 6][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 5][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 4][0]), &status_count);
+  skip_dibit (opts, state, 20, &status_count);
 
   // IMBE 7
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 7
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 3][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 2][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 1][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 0][0]), &status_count);
+  skip_dibit (opts, state, 20, &status_count);
 
   // IMBE 8
   process_IMBE (opts, state, &status_count);
@@ -576,17 +550,6 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
       // TODO: do something useful with the status bits...
   }
 
-  // Error correct the hex_data using Reed-Solomon hex_parity
-#ifndef NO_REEDSOLOMON
-  irrecoverable_errors = ReedSolomon_24_12_13_decode(&state->ReedSolomon_24_12_13,
-                                                     (unsigned char*)hex_data,
-                                                     (unsigned char*)hex_parity);
-  if (irrecoverable_errors == 1) {
-      state->debug_header_critical_errors++;
-      update_p25_error_stats(state, 12*6+12*6, 7*2);
-  }
-#endif
-
   lcformat  = (get_uint(hex_data[0], 6) << 6);
   lcformat |= ((hex_data[1][0] << 1) | (hex_data[1][1] << 0));
   mfid  = ((get_uint(hex_data[1]+2, 4) << 4) | (get_uint(hex_data[2], 4) << 0));
@@ -608,9 +571,7 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   unsigned short kid = 0;
   char mi[25];
   unsigned char hex_data[16][6];    // Data in hex-words (6 bit words). A total of 16 hex words.
-  unsigned char hex_parity[8][6];   // Parity of the data, again in hex-word format. A total of 12 parity hex words.
   int status_count;
-  int irrecoverable_errors = 0;
 
   // we skip the status dibits that occur every 36 symbols
   // the first IMBE frame starts 14 symbols before next status
@@ -664,19 +625,13 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 6
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 7][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 6][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 5][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 4][0]), &status_count);
+  skip_dibit (opts, state, 20, &status_count);
 
   // IMBE 7
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 7
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 3][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 2][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 1][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_parity[ 0][0]), &status_count);
+  skip_dibit (opts, state, 20, &status_count);
 
   // IMBE 8
   process_IMBE (opts, state, &status_count);
@@ -718,17 +673,6 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
       getDibit (opts, state);
       // TODO: do something useful with the status bits...
   }
-
-  // Error correct the hex_data using Reed-Solomon hex_parity
-#ifndef NO_REEDSOLOMON
-  irrecoverable_errors = ReedSolomon_24_16_09_decode(&state->ReedSolomon_24_16_09,
-                                                     (unsigned char*)hex_data,
-                                                     (unsigned char*)hex_parity);
-  if (irrecoverable_errors == 1) {
-      state->debug_header_critical_errors++;
-      update_p25_error_stats(state, 12*6+12*6, 5*2);
-  }
-#endif
 
   algid  = (get_uint(hex_data[12], 6) << 6);
   algid |= (get_uint(hex_data[13], 2) << 0);
@@ -803,8 +747,6 @@ processTDULC (dsd_opts* opts, dsd_state* state)
   unsigned char dodeca_data[6][12];    // Data in 12-bit words. A total of 6 words.
   unsigned char zeroes[21];
   int status_count;
-  unsigned char dodeca_parity[6][12];  // Reed-Solomon parity of the data. A total of 6 parity 12-bit words.
-  int irrecoverable_errors = 0;
 
   // we skip the status dibits that occur every 36 symbols
   // the first IMBE frame starts 14 symbols before next status
@@ -831,42 +773,7 @@ processTDULC (dsd_opts* opts, dsd_state* state)
 
       // Use the Golay23 FEC to correct it.
       corrected_hexword = correct_hex_word(state, hex_and_parity, 12);
-
-      // codeword is now hopefully fixed
-      // put it back into our hex format
-#ifndef NO_REEDSOLOMON
-      for (i = 0; i < 12; i++) {
-          dodeca_parity[5-j][i] = ((corrected_hexword >> (11 - i)) & 1);
-      }
-#endif
   }
-
-  // Swap the two 6-bit words to accommodate for the expected word order of the Reed-Solomon decoding
-#ifndef NO_REEDSOLOMON
-  for(i=0; i<6; i++) {
-      swap_hex_words_bits((unsigned char*)dodeca_data + i*12);
-      swap_hex_words_bits((unsigned char*)dodeca_parity + i*12);
-  }
-
-  // Error correct the hex_data using Reed-Solomon hex_parity
-  irrecoverable_errors = ReedSolomon_24_12_13_decode(&state->ReedSolomon_24_12_13,
-                                                     (unsigned char*)dodeca_data,
-                                                     (unsigned char*)dodeca_parity);
-
-  // Recover the original order
-  for(i=0; i<6; i++) {
-      swap_hex_words_bits((unsigned char*)dodeca_data + i*12);
-  }
-
-  if (irrecoverable_errors == 1) {
-      state->debug_header_critical_errors++;
-      // We can correct (13-1)/2 = 6 errors. If we failed, it means that there were more than 6 errors in
-      // these 12+12 words. But take into account that each hex word was already error corrected with
-      // Golay 23, which can correct 3 bits on each sequence of (12+11) bits. We could say that there were
-      // 7 errors of 4 bits.
-      update_p25_error_stats(state, 12*6+12*6, 7*4);
-  }
-#endif
 
   // Next 10 dibits should be zeros
   skip_dibit(opts, state, 10, &status_count);
