@@ -80,11 +80,13 @@ get_p25_nac_and_duid(dsd_opts *opts, dsd_state *state)
       new_nac &= 0x0FFF;
       if (new_nac != nac) {
           // NAC fixed by error correction
+          printf("old_nac: 0x%03x -> nac: 0x%03x\n", nac, new_nac);
           nac = new_nac;
           state->debug_header_errors++;
       }
       if (new_duid != duid) {
           // DUID fixed by error correction
+          printf("old_duid: 0x%x -> duid: 0x%x\n", duid, new_duid);
           duid = new_duid;
           state->debug_header_errors++;
       }
@@ -97,7 +99,7 @@ get_p25_nac_and_duid(dsd_opts *opts, dsd_state *state)
   } else {
       // Check of NID failed and unable to recover its value
       //printf("NID error\n");
-      duid = -1;
+      //duid = -1;
       state->debug_header_critical_errors++;
   }
   state->nac = nac;
