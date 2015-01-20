@@ -222,8 +222,6 @@ read_dibit (dsd_opts* opts, dsd_state* state, unsigned char* output, unsigned in
     unsigned int i;
 
     for (i = 0; i < count; i++) {
-        int dibit;
-
         if (*status_count == 35) {
             // Status bits now
             // TODO: do something useful with the status bits...
@@ -317,7 +315,7 @@ read_and_correct_hdu_hex_word (dsd_opts* opts, dsd_state* state, unsigned char* 
   hex_to_bin(hex, corrected_hexword);
 }
 
-static void update_p25_error_stats (dsd_state* state, unsigned int nbits, unsigned int n_errs)
+void update_p25_error_stats (dsd_state* state, unsigned int nbits, unsigned int n_errs)
 {
     state->p25_bit_count += nbits;
     state->p25_bit_error_count += n_errs;
@@ -415,30 +413,57 @@ processHDU(dsd_opts* opts, dsd_state* state)
   }
 }
 
-void
-read_and_correct_hex_word (dsd_opts* opts, dsd_state* state, unsigned char* hex, int* status_count)
+unsigned int
+read_and_correct_hex_word (dsd_opts* opts, dsd_state* state, int* status_count)
 {
-  unsigned char hex_and_parity[10];
-  unsigned int i, value_in = 0, value = 0;
+  unsigned char hex_and_parity[40];
+  unsigned int i, value_in[4], value = 0, value_out = 0;
 
   // Read the hexword and parity
-  read_dibit(opts, state, parity, 5, status_count);
+  read_dibit(opts, state, hex_and_parity, 20, status_count);
 
   // Use Hamming to error correct the hex word
   // in the bitset 9 is the left-most and 0 is the right-most
+  value_in[3] = value_in[2] = value_in[1] = value_in[0] = 0;  
   for (i=0; i<5; i++) {
-      value_in <<= 2;
-      value_in |= hex_and_parity[i];
+      value_in[0] <<= 2;
+      value_in[0] |= hex_and_parity[i];
+      value_in[1] <<= 2;
+      value_in[1] |= hex_and_parity[i+5];
+      value_in[2] <<= 2;
+      value_in[2] |= hex_and_parity[i+10];
+      value_in[3] <<= 2;
+      value_in[3] |= hex_and_parity[i+15];
   }
-  value = value_in;
+  value = value_in[0];
   p25_hamming15_11_3_decode(&value);
-  value &= 0x3f; value_in >>= 4; value_in &= 0x3f; 
+  value &= 0x3f; value_in[0] >>= 4;
+  if (value != value_in[0]) { state->debug_header_errors++; }
+  value_out <<= 6;
+  value_out |= value;
 
-  hex_to_bin(hex, value);
+  value = value_in[1];
+  p25_hamming15_11_3_decode(&value);
+  value &= 0x3f; value_in[1] >>= 4;
+  if (value != value_in[1]) { state->debug_header_errors++; }
+  value_out <<= 6;
+  value_out |= value;
 
-  if (value != value_in) {
-      state->debug_header_errors++;
-  }
+  value = value_in[2];
+  p25_hamming15_11_3_decode(&value);
+  value &= 0x3f; value_in[2] >>= 4;
+  if (value != value_in[2]) { state->debug_header_errors++; }
+  value_out <<= 6;
+  value_out |= value;
+
+  value = value_in[3];
+  p25_hamming15_11_3_decode(&value);
+  value &= 0x3f; value_in[3] >>= 4;
+  if (value != value_in[3]) { state->debug_header_errors++; }
+  value_out <<= 6;
+  value_out |= value;
+
+  return value_out;
 }
 
 static void
@@ -448,8 +473,8 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   int i;
   unsigned char mfid = 0, lcformat = 0;
   unsigned char lsd1 = 0, lsd2 = 0;
-  char lcinfo[21];
-  unsigned char hex_data[12][6];    // Data in hex-words (6 bit words). A total of 12 hex words.
+  //unsigned char hex_data[12][6];    // Data in hex-words (6 bit words). A total of 12 hex words.
+  unsigned char hex_data[3];    // Data in hex-words (6 bit words), stored packed in groups of four, in a uint32_t
   int status_count;
 
   // we skip the status dibits that occur every 36 symbols
@@ -468,28 +493,19 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 2
-  read_and_correct_hex_word (opts, state, &(hex_data[ 0][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 1][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 2][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 3][0]), &status_count);
+  hex_data[0] = read_and_correct_hex_word (opts, state, &status_count);
 
   // IMBE 3
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 3
-  read_and_correct_hex_word (opts, state, &(hex_data[ 4][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 5][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 6][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 7][0]), &status_count);
+  hex_data[1] = read_and_correct_hex_word (opts, state, &status_count);
 
   // IMBE 4
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 4
-  read_and_correct_hex_word (opts, state, &(hex_data[ 8][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[ 9][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[10][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[11][0]), &status_count);
+  hex_data[2] = read_and_correct_hex_word (opts, state, &status_count);
 
   // IMBE 5
   process_IMBE (opts, state, &status_count);
@@ -550,15 +566,10 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
       // TODO: do something useful with the status bits...
   }
 
-  lcformat  = (get_uint(hex_data[0], 6) << 6);
-  lcformat |= ((hex_data[1][0] << 1) | (hex_data[1][1] << 0));
-  mfid  = ((get_uint(hex_data[1]+2, 4) << 4) | (get_uint(hex_data[2], 4) << 0));
-  hexdump_p25_packet(hex_data, 3, 9, lcinfo);
-  lcinfo[18] = '0';
-  lcinfo[19] = (((hex_data[2][5] << 1) | (hex_data[2][4] << 0)) + 0x30);
-  lcinfo[20] = '\0';
+  lcformat  = (hex_data[0] & 0xFF);
+  mfid  = ((hex_data[0] >> 8) & 0xFF);
   if (opts->verbose > 0) {
-      printf ("mfid: %u, lcformat: 0x%02x, lcinfo: %s\n", mfid, lcformat, lcinfo);
+      printf ("mfid: %u, lcformat: 0x%02x, lcinfo: 0x%02x 0x%06x 0x%06x\n", mfid, lcformat, (hex_data[0] >> 16), hex_data[1], hex_data[2]);
   }
 }
 
@@ -569,8 +580,8 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   int i;
   unsigned char algid = 0, lsd1 = 0, lsd2 = 0;
   unsigned short kid = 0;
-  char mi[25];
-  unsigned char hex_data[16][6];    // Data in hex-words (6 bit words). A total of 16 hex words.
+  //unsigned char hex_data[16][6];    // Data in hex-words (6 bit words). A total of 16 hex words.
+  unsigned char hex_data[4];    // Data in hex-words (6 bit words). A total of 16 hex words.
   int status_count;
 
   // we skip the status dibits that occur every 36 symbols
@@ -589,37 +600,25 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 2
-  read_and_correct_hex_word (opts, state, &(hex_data[0][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[1][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[2][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[3][0]), &status_count);
+  hex_data[0] = read_and_correct_hex_word (opts, state, &status_count);
 
   // IMBE 3
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 3
-  read_and_correct_hex_word (opts, state, &(hex_data[4][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[5][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[6][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[7][0]), &status_count);
+  hex_data[1] = read_and_correct_hex_word (opts, state, &status_count);
 
   // IMBE 4
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 4
-  read_and_correct_hex_word (opts, state, &(hex_data[8][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[9][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[10][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[11][0]), &status_count);
+  hex_data[2] = read_and_correct_hex_word (opts, state, &status_count);
 
   // IMBE 5
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 5
-  read_and_correct_hex_word (opts, state, &(hex_data[12][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[13][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[14][0]), &status_count);
-  read_and_correct_hex_word (opts, state, &(hex_data[15][0]), &status_count);
+  hex_data[3] = read_and_correct_hex_word (opts, state, &status_count);
 
   // IMBE 6
   process_IMBE (opts, state, &status_count);
@@ -674,30 +673,22 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
       // TODO: do something useful with the status bits...
   }
 
-  algid  = (get_uint(hex_data[12], 6) << 6);
-  algid |= (get_uint(hex_data[13], 2) << 0);
+  algid  = (hex_data[3] & 0xFF);
 
   // The encryption key ID
-  kid = get_uint(hex_data[13]+2, 4);
-  kid <<= 6;
-  kid |= get_uint(hex_data[14], 6);
-  kid <<= 6;
-  kid |= get_uint(hex_data[15], 6);
+  kid = ((hex_data[3] >> 8) & 0xFFFF);
   if (opts->p25enc == 1) {
       printf ("algid: 0x%02x kid: 0x%04x\n", algid, kid);
   }
 
   if (opts->verbose > 2) {
-    mi[24] = '\0';
-    hexdump_p25_packet(hex_data, 0, 12, mi);
-    printf ("mi: %s\n", mi);
+    printf ("mi: 0x%04x 0x%04x 0x%04x\n", hex_data[0], hex_data[1], hex_data[2]);
   }
 }
 
 static void
 processTDU (dsd_opts* opts, dsd_state* state)
 {
-    unsigned char zeroes[29];
     int status_count;
 
     // we skip the status dibits that occur every 36 symbols
@@ -745,7 +736,6 @@ processTDULC (dsd_opts* opts, dsd_state* state)
   unsigned char lcformat = 0, mfid = 0;
   char lcinfo[57];
   unsigned char dodeca_data[6][12];    // Data in 12-bit words. A total of 6 words.
-  unsigned char zeroes[21];
   int status_count;
 
   // we skip the status dibits that occur every 36 symbols
