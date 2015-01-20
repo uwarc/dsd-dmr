@@ -335,56 +335,6 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             }
             return state->lastsynctype;
           }
-
-          if ((t == 24) && (state->lastsynctype != -1)) {
-              if ((state->lastsynctype == 0) && 
-                  ((state->lastp25type == 1) || (state->lastp25type == 2))) {
-                  state->carrier = 1;
-                  state->offset = synctest_pos;
-                  state->max = ((state->max) + (lmax)) / 2;
-                  state->min = ((state->min) + (lmin)) / 2;
-                  strcpy (state->ftype, " (P25p1)   ");
-                  state->lastsynctype = -1;
-                  return (0);
-              } else if ((state->lastsynctype == 1) &&
-                         ((state->lastp25type == 1) || (state->lastp25type == 2))) {
-                  state->carrier = 1;
-                  state->offset = synctest_pos;
-                  state->max = ((state->max) + lmax) / 2;
-                  state->min = ((state->min) + lmin) / 2;
-                  strcpy (state->ftype, " (P25p1)   ");
-                  state->lastsynctype = -1;
-                  return (1);
-              } else if ((state->lastsynctype == 4) && 
-                         ((memcmp (synctest, X2TDMA_BS_DATA_SYNC, 24) != 0) ||
-                          (memcmp (synctest, X2TDMA_MS_DATA_SYNC, 24) != 0))) {  
-                  state->carrier = 1;
-                  state->offset = synctest_pos;
-                  state->max = ((state->max) + lmax) / 2;
-                  state->min = ((state->min) + lmin) / 2;
-                  strcpy (state->ftype, "(X2-TDMA)  ");
-                  state->lastsynctype = -1;
-                  return (4);
-              } else if ((state->lastsynctype == 11) &&
-                  ((memcmp (synctest, DMR_BS_VOICE_SYNC, 24) != 0) || (memcmp (synctest, DMR_MS_VOICE_SYNC, 24) != 0))) {
-                  state->carrier = 1;
-                  state->offset = synctest_pos;
-                  state->max = ((state->max) + lmax) / 2;
-                  state->min = ((state->min) + lmin) / 2;
-                  strcpy (state->ftype, " (DMR)     ");
-                  state->lastsynctype = -1;
-                  return (11);
-              } else if ((state->lastsynctype == 12) && 
-                         ((memcmp (synctest, DMR_BS_DATA_SYNC, 24) != 0) || (memcmp (synctest, DMR_MS_DATA_SYNC, 24) != 0))) { 
-                  state->carrier = 1;
-                  state->offset = synctest_pos;
-                  state->max = ((state->max) + lmax) / 2;
-                  state->min = ((state->min) + lmin) / 2;
-                  strcpy (state->ftype, " (DMR)     ");
-                  state->lastsynctype = -1;
-                  return (12);
-              }
-          }
       }
 
       if (exitflag == 1) {
