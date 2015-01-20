@@ -103,7 +103,7 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
           lidx++;
       }
 
-      if (state->sidx == (opts->ssize - 1)) {
+      if (state->sidx == (state->ssize - 1)) {
           state->sidx = 0;
       } else {
           state->sidx++;
@@ -147,8 +147,8 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
           lmax = (lbuf2[21] + lbuf2[20] + lbuf2[19]) / 3;
           state->maxref = state->max;
           state->minref = state->min;
-          if (opts->datascope) {
-            print_datascope(state, lidx, lbuf2);
+          if (opts->datascope && (lidx == 0)) {
+            print_datascope(state, lbuf2, 24);
           }
 
           memcpy (synctest, (synctest_p - 23), 24);
