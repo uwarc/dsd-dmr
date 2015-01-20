@@ -62,9 +62,6 @@ noCarrier (dsd_opts * opts, dsd_state * state)
   for (i = 0; i < 200; i++) {
     state->dibit_buf[i] = 0;
   }
-  if (opts->mbe_out_fd != -1) {
-      closeMbeOutFile (opts, state);
-  }
   state->inbuf_size = 512;
   state->inbuf_pos = 512;
   state->jitter = -1;
@@ -144,7 +141,6 @@ static void initState (dsd_state * state)
   state->d_symbol_spread = 2.0f; // nominal symbol spread of 2.0 gives outputs at -3, -1, +1, +3
   state->d_symbol_time = (1.0f / (float)state->samplesPerSymbol);
   state->fine_frequency_correction = 0.0f;
-  state->coarse_frequency_correction = 0.0f;
   for (i = 0; i <= FSK4_NTAPS; i++) {
       state->d_history[i] = 0.0f;
   }
@@ -221,7 +217,9 @@ static void usage ()
 void
 cleanupAndExit (dsd_opts * opts, dsd_state * state)
 {
-  noCarrier (opts, state);
+  if (opts->mbe_out_fd != -1) {
+    closeMbeOutFile (opts, state);
+  }
   closeWavOutFile (opts);
 
   printf("\n");
