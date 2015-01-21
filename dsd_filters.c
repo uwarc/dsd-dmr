@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <math.h>
 
 // DMR filter
@@ -77,29 +78,86 @@ static float nxcoeffs[] = {
   -0.056372283, -0.052119261, -0.045828927, -0.037935027,
   -0.028914291, -0.019262057, -0.009468531, +0.000003302,
   +0.008737200, +0.016379869, +0.022653298, +0.027362877,
-  +0.030401148, +0.031747267, +0.031462429
+  +0.030401148, +0.031747267, +0.031462429, 0.0 
 };
 
+#if defined(__amd64__) || defined(__x86_64__) || defined(__i386__) && defined(__SSE__)
 static float scalarproduct_float_sse(float *v1, float *v2, unsigned int len) {
         float sum = 0.0f;
         unsigned int i;
 
         for(i=0; i<len; i+=4) {
             __asm__ volatile(
-                 "movaps  (%1), %%xmm7 \n\t"
-                 "mulps   (%2), %%xmm7 \n\t"
-                 "addps %%xmm7, %0 \n\t"
+                 "movups  (%1), %%xmm2 \n\t"
+                 "movaps  (%2), %%xmm3 \n\t"
+                 "mulps %%xmm3, %%xmm2 \n\t"
+                 "addps %%xmm2, %0 \n\t"
                 :"=x"(sum) :"r"(&v1[i]), "r"(&v2[i]));
         }
         __asm__ volatile(
-                 "movaps      %0, %%xmm6 \n\t"
-                 "shufps   $0x1b, %0, %%xmm6 \n\t"
-                 "addps       %0, %%xmm6 \n\t"
-                 "movhlps %%xmm6, %0     \n\t"
-                 "addps   %%xmm6, %0     \n\t"
+                 "movaps      %0, %%xmm5 \n\t"
+                 "shufps   $0x1b, %0, %%xmm5 \n\t"
+                 "addps       %0, %%xmm5 \n\t"
+                 "movhlps %%xmm5, %0     \n\t"
+                 "addps   %%xmm5, %0     \n\t"
                 :"+x"(sum));
         return sum;
 }
+#define scalarproduct_float scalarproduct_float_sse
+#elif defined(__ARM_NEON__)
+static float scalarproduct_float_neon(float *a, float *b, unsigned int len)
+{
+    float ret = 0.0f;
+    uint32_t remainder = (len & 15);
+    len -= remainder;
+
+    __asm__ __volatile("  vmov.f32 q1, #0.0\n"
+                       "  cmp %[len], #0\n"
+                       "  bne 1f\n"
+                       "  b 2f\n"
+                       "1:"
+                       "  vld1.32 {q8, q9}, [%[b]]!\n"
+                       "  vld1.32 {q12, q13}, [%[a]]!\n"
+                       "  vld1.32 {q10, q11}, [%[b]]!\n"
+                       "  vld1.32 {q14, q15}, [%[a]]!\n"
+                       "  vmla.f32 q1, q8, q12\n"
+                       "  vmla.f32 q1, q9, q13\n"
+                       "  vmla.f32 q1, q10, q14\n"
+                       "  vmla.f32 q1, q11, q15\n"
+                       "  subs %[len], %[len], #16\n"
+                       "  bne 1b\n"
+                       "  cmp %[remainder], #0\n"
+                       "  beq 3f\n"
+                       "2:"
+                       "  vld1.32 {q2}, [%[b]]!\n"
+                       "  vld1.32 {q3}, [%[a]]!\n"
+                       "  vmla.f32 q1, q2, q3\n"
+                       "  subs %[remainder], %[remainder], #4\n"
+                       "  bne 2b\n"
+                       "2:"
+                       "  vadd.f32 d2, d2, d3\n"
+                       "  vpadd.f32 d2, d2, d2\n"
+                       "  vmov.f32 %[ret], d2[0]\n"
+                       : [ret] "=&r" (ret), [a] "+r" (a), [b] "+r" (b),
+                         [len] "+l" (len), [remainder] "+l" (remainder)
+                       :
+                       : "cc", "q1", "q2", "q3", "q8", "q9", "q10", "q11",
+                               "q12", "q13", "q14", "q15");
+    return ret;
+}
+#define scalarproduct_float scalarproduct_float_neon
+#else
+static float scalarproduct_float_c(float *v1, float *v2, unsigned int len)
+{
+    float p = 0.0f;
+    unsigned int i;
+    for (i = 0; i < len; i++) {
+        p += v1[i] * v2[i];
+    }
+    return p;
+}
+#define scalarproduct_float scalarproduct_float_c
+#endif
 
 float
 dmr_filter(float sample)
@@ -111,8 +169,7 @@ dmr_filter(float sample)
     xv[i] = xv[i+1];
 
   xv[NZEROS] = sample; // unfiltered sample in
-
-  sum = scalarproduct_float_sse(xv, xcoeffs, 84);
+  sum = scalarproduct_float(xv, xcoeffs, 84);
   return (sum * ngain); // filtered sample out
 }
 
@@ -126,10 +183,7 @@ nxdn_filter(float sample)
     nxv[i] = nxv[i+1];
 
   nxv[NXZEROS] = sample; // unfiltered sample in
-
-  for (i = 0; i <= NXZEROS; i++)
-    sum += (nxcoeffs[i] * nxv[i]);
-
+  sum = scalarproduct_float(nxv, nxcoeffs, 136);
   return (sum * nxgain); // filtered sample out
 }
 
