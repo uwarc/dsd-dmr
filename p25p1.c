@@ -113,7 +113,7 @@ static int mbe_eccImbe7200x4400Data (char imbe_fr[8][23], char *imbe_d)
   for (i = 0; i < 4; i++) {
       if (i > 0) {
           gin = 0;
-          for (j = 22; j >= 0; j++) {
+          for (j = 22; j >= 0; j--) {
               gin <<= 1;
               gin |= imbe_fr[i][j];
           }
