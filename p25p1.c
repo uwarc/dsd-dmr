@@ -482,10 +482,6 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   // so we start counter at 36-14-1 = 21
   status_count = 21;
 
-  if (opts->errorbars == 1) {
-      printf ("e:");
-  }
-
   // IMBE 1
   process_IMBE (opts, state, &status_count);
 
@@ -552,7 +548,7 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   process_IMBE (opts, state, &status_count);
 
   if (opts->errorbars == 1) {
-      printf ("\n");
+      printf ("e: %u\n", state->errs2);
   }
 
   if (opts->p25status == 1) {
@@ -588,10 +584,6 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   // the first IMBE frame starts 14 symbols before next status
   // so we start counter at 36-14-1 = 21
   status_count = 21;
-
-  if (opts->errorbars == 1) {
-      printf ("e:");
-  }
 
   // IMBE 1
   process_IMBE (opts, state, &status_count);
@@ -659,7 +651,7 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   process_IMBE (opts, state, &status_count);
 
   if (opts->errorbars == 1) {
-      printf ("\n");
+      printf ("e: %u\n", state->errs2);
   }
 
   if (opts->p25status == 1) {

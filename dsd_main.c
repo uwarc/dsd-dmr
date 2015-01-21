@@ -62,8 +62,8 @@ noCarrier (dsd_opts * opts, dsd_state * state)
   for (i = 0; i < 200; i++) {
     state->dibit_buf[i] = 0;
   }
-  state->inbuf_size = 512;
-  state->inbuf_pos = 512;
+  state->inbuf_size = 4096;
+  state->inbuf_pos = 4096;
   state->jitter = -1;
   state->lastsynctype = -1;
   state->carrier = 0;
@@ -96,6 +96,9 @@ static inline void initOpts (dsd_opts * opts)
   opts->errorbars = 1;
   opts->datascope = 0;
   opts->verbose = 2;
+  opts->p25enc = 0;
+  opts->p25status = 1;
+  opts->p25tg = 0;
   opts->audio_in_fd = -1;
   opts->mbe_out_dir[0] = 0;
   opts->mbe_out_path[0] = 0;
@@ -119,8 +122,9 @@ static void initState (dsd_state * state)
   state->repeat = 0;
   state->audio_out_temp_buf_p = state->audio_out_temp_buf;
   //state->wav_out_bytes = 0;
+  state->inbuf_size = 4096;
+  state->inbuf_pos = 4096;
   state->samplesPerSymbol = 10;
-  state->symbolCenter = 4;
   state->center = 0;
   state->jitter = -1;
   state->synctype = -1;
@@ -294,6 +298,15 @@ main (int argc, char **argv)
           exit (0);
         case 'e':
           opts.errorbars = 1;
+          break;
+        case 'p':
+          if (optarg[0] == 'e') {
+              opts.p25enc = 1;
+          } else if (optarg[0] == 's') {
+              opts.p25status = 1;
+          } else if (optarg[0] == 't') {
+              opts.p25tg = 1;
+          }
           break;
         case 'q':
           opts.errorbars = 0;
