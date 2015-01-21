@@ -182,7 +182,6 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
           }
           // Non-Sync part of the superframe
 #if 0
-#if 0
           if (!doQR1676(&emb_field)) {
 #endif
               lcss = ((emb_field >> 10) & 3);
@@ -192,7 +191,6 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
               }
 #if 0
           }
-#endif
 #endif
       } else { 
           for (i = 0; i < 24; i++) {
@@ -303,6 +301,6 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
           // first half current slot
           skipDibit (opts, state, 54);
       }
-  }
+    }
 }
 

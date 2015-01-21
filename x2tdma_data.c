@@ -36,37 +36,6 @@ static const char *slottype_to_string[16] = {
       "Unknown/Bad  "  // 1111
 };
 
-static unsigned char hamming7_4_decode[64] =
-{
-    0x00, 0x03, 0x05, 0xE7,     /* 0x00 to 0x07 */
-    0x09, 0xEB, 0xED, 0xEE,     /* 0x08 to 0x0F */
-    0x03, 0x33, 0x4D, 0x63,     /* 0x10 to 0x17 */
-    0x8D, 0xA3, 0xDD, 0xED,     /* 0x18 to 0x1F */
-    0x05, 0x2B, 0x55, 0x65,     /* 0x20 to 0x27 */
-    0x8B, 0xBB, 0xC5, 0xEB,     /* 0x28 to 0x2F */
-    0x81, 0x63, 0x65, 0x66,     /* 0x30 to 0x37 */
-    0x88, 0x8B, 0x8D, 0x6F,     /* 0x38 to 0x3F */
-    0x09, 0x27, 0x47, 0x77,     /* 0x40 to 0x47 */
-    0x99, 0xA9, 0xC9, 0xE7,     /* 0x48 to 0x4F */
-    0x41, 0xA3, 0x44, 0x47,     /* 0x50 to 0x57 */
-    0xA9, 0xAA, 0x4D, 0xAF,     /* 0x58 to 0x5F */
-    0x21, 0x22, 0xC5, 0x27,     /* 0x60 to 0x67 */
-    0xC9, 0x2B, 0xCC, 0xCF,     /* 0x68 to 0x6F */
-    0x11, 0x21, 0x41, 0x6F,     /* 0x70 to 0x77 */
-    0x81, 0xAF, 0xCF, 0xFF      /* 0x78 to 0x7F */
-};
-
-static unsigned char hamming7_4_correct(unsigned char value)
-{
-    unsigned char c = hamming7_4_decode[value >> 1];
-    if (value & 1) {
-        c &= 0x0F;
-    } else {
-        c >>= 4;
-    }
-    return c;
-}
-
 void
 processX2TDMAData (dsd_opts * opts, dsd_state * state)
 {
@@ -74,7 +43,6 @@ processX2TDMAData (dsd_opts * opts, dsd_state * state)
   int *dibit_p;
   char sync[25];
   unsigned char cachbits[25];
-  unsigned char cach_hdr = 0, cach_hdr_hamming = 0;
   unsigned int golay_codeword = 0;
   unsigned int bursttype = 0;
   unsigned int print_burst = 1;
@@ -87,11 +55,8 @@ processX2TDMAData (dsd_opts * opts, dsd_state * state)
       cachbits[2*i] = (1 & (dibit >> 1));    // bit 1
       cachbits[2*i+1] = (1 & dibit);   // bit 0
   }
-  cach_hdr  = ((cachbits[0] << 0) | (cachbits[4] << 1) | (cachbits[8] << 2) | (cachbits[12] << 3));
-  cach_hdr |= ((cachbits[14] << 4) | (cachbits[18] << 5) | (cachbits[22] << 6));
-  cach_hdr_hamming = hamming7_4_correct(cach_hdr);
 
-  state->currentslot = ((cach_hdr_hamming >> 1) & 1);      // bit 1
+  state->currentslot = (cachbits[4] & 1);      // bit 1
   if (state->currentslot == 0) {
       state->slot0light[0] = '[';
       state->slot0light[6] = ']';
@@ -108,22 +73,6 @@ processX2TDMAData (dsd_opts * opts, dsd_state * state)
   dibit_p += 49;
 
   // slot type
-#if 0
-  golay_codeword  = getDibit (opts, state);
-  golay_codeword <<= 2;
-  golay_codeword |= getDibit (opts, state);
-
-  dibit = getDibit (opts, state);
-  bursttype = dibit;
-
-  dibit = getDibit (opts, state);
-  bursttype = ((bursttype << 2) | dibit);
-  golay_codeword = ((golay_codeword << 4)|bursttype);
-
-  // parity bit
-  golay_codeword <<= 2;
-  golay_codeword |= getDibit (opts, state);
-#endif
   golay_codeword  = *dibit_p++;
   golay_codeword <<= 2;
   golay_codeword |= *dibit_p++;
@@ -177,9 +126,9 @@ processX2TDMAData (dsd_opts * opts, dsd_state * state)
 
   if (print_burst) { 
       int level = (int) state->max / 164;
-      printf ("Sync: %s mod: QPSK offs: %u      inlvl: %2i%% %s %s CACH: 0x%x ",
+      printf ("Sync: %s mod: QPSK offs: %u      inlvl: %2i%% %s %s ",
               state->ftype, state->offset, level,
-              state->slot0light, state->slot1light, cach_hdr_hamming);
+              state->slot0light, state->slot1light);
       if (bursttype > 9) {
           printf ("Unknown burst type: %u\n", bursttype);
       } else {

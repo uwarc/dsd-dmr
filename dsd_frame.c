@@ -158,14 +158,19 @@ processFrame (dsd_opts * opts, dsd_state * state)
           processDMRdata (opts, state);
       }
       return;
+#if 0
   } else if ((state->synctype >= 2) && (state->synctype <= 5)) {
       if ((state->synctype == 3) || (state->synctype == 4)) {
-          //processX2TDMAvoice (opts, state);
+          if ((opts->mbe_out_dir[0] != 0) && (opts->mbe_out_fd == -1)) {
+              openMbeOutFile (opts, state);
+          }
+          processX2TDMAvoice (opts, state);
       } else {
           state->err_str[0] = 0;
           processX2TDMAData (opts, state);
       }
       return;
+#endif
   } else {
       unsigned char duid = get_p25_nac_and_duid(opts, state);
       printf("p25 NAC: 0x%03x, DUID: 0x%x\n", state->nac, duid);
