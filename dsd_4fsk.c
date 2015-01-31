@@ -128,23 +128,14 @@ getSymbol (dsd_opts *opts, dsd_state *state, int have_sync)
         short tmp;
 
         // Read the new sample from the input
-        if(opts->audio_in_type == 0) {
+        if((opts->audio_in_type == 0) || (opts->audio_in_type == 1)) {
             result = read (opts->audio_in_fd, &tmp, 2);
             sample = (tmp / 16384.0f);
-            sample *= (12000.0f / 648.0f);
-        }
-        else if (opts->audio_in_type == 1) {
-#ifdef USE_SNDFILE
-            result = sf_read_float(opts->audio_in_file, &tmp, 1);
-#else
-            result = read (opts->audio_in_fd, &tmp, 2);
-            sample = (tmp / 16384.0f);
-            sample *= (12000.0f / 648.0f);
-#endif
         } else if ((opts->audio_in_type == 4) || (opts->audio_in_type == 5)) {
             result = read (opts->audio_in_fd, &sample, 4);
             sample *= 2.0f;
         }
+        sample *= (12000.0f / 648.0f);
   
         if(result <= 0) {
           cleanupAndExit (opts, state);
