@@ -124,7 +124,7 @@ getSymbol (dsd_opts *opts, dsd_state *state, int have_sync)
     // first we run through all provided data
     //for(i = 0; i < 10; i++) {
     for(i = 0; i < 4800; i++) {
-        float sample;
+        float sample = 0.0f;
         short tmp;
 
         // Read the new sample from the input
@@ -150,10 +150,9 @@ getSymbol (dsd_opts *opts, dsd_state *state, int have_sync)
           cleanupAndExit (opts, state);
         }
 
-        sample = dmr_filter(sample);
+        sample = dmr_filter(state, sample);
         if (fsk4_tracking_loop_mmse(state, sample, &sample_out)) {
             state->symbolcnt++;
-            //return lrintf(sample_out * 1024.0f);
             return lrintf(sample_out * 1024.0f);
         }
     }
