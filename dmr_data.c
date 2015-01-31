@@ -346,10 +346,9 @@ static unsigned int check_and_fix_reedsolomon_12_09_04(ReedSolomon *rs, unsigned
 void
 processDMRdata (dsd_opts * opts, dsd_state * state)
 {
-  int i, j,;
+  int i, j;
   unsigned int dibit;
   unsigned char *dibit_p;
-  char sync[25];
   unsigned char cach1bits[25];
   unsigned char cach1_hdr = 0, cach1_hdr_hamming = 0;
   unsigned char infodata[196];
@@ -365,7 +364,7 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
     state->firstframe = 0;
   }
 
-  dibit_p = state->dibit_buf_p - 90;
+  dibit_p = state->dibit_buf_p - 66;
 
   // CACH
   for (i = 0; i < 12; i++) {
@@ -414,18 +413,10 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   golay_codeword |= *dibit_p++;
 
   // signaling data or sync
-  for (i = 0; i < 24; i++) {
-      dibit = *dibit_p++;
-      sync[i] = (dibit | 1) + 48;
-  }
-  sync[24] = 0;
-
-  if ((strcmp (sync, DMR_BS_DATA_SYNC) == 0) || (strcmp (sync, DMR_MS_DATA_SYNC) == 0)) {
-      if (state->currentslot == 0) {
-          strcpy (state->slot0light, "[slot0]");
-      } else {
-          strcpy (state->slot1light, "[slot1]");
-      }
+  if (state->currentslot == 0) {
+      strcpy (state->slot0light, "[slot0]");
+  } else {
+      strcpy (state->slot1light, "[slot1]");
   }
 
   // repeat of slottype
@@ -531,13 +522,12 @@ processX2TDMAData (dsd_opts * opts, dsd_state * state)
   int i;
   unsigned int dibit;
   unsigned char *dibit_p;
-  char sync[25];
   unsigned char cachbits[25];
   unsigned int golay_codeword = 0;
   unsigned int bursttype = 0;
   unsigned int print_burst = 1;
 
-  dibit_p = state->dibit_buf_p - 90;
+  dibit_p = state->dibit_buf_p - 66;
 
   // CACH
   for (i = 0; i < 12; i++) {
@@ -578,18 +568,10 @@ processX2TDMAData (dsd_opts * opts, dsd_state * state)
   golay_codeword |= *dibit_p++;
 
   // signaling data or sync
-  for (i = 0; i < 24; i++) {
-      dibit = *dibit_p++;
-      sync[i] = (dibit | 1) + 48;
-  }
-  sync[24] = 0;
-
-  if ((strcmp (sync, X2TDMA_BS_DATA_SYNC) == 0) || (strcmp (sync, X2TDMA_BS_DATA_SYNC) == 0)) {
-      if (state->currentslot == 0) {
-          strcpy (state->slot0light, "[slot0]");
-      } else {
-          strcpy (state->slot1light, "[slot1]");
-      }
+  if (state->currentslot == 0) {
+      strcpy (state->slot0light, "[slot0]");
+  } else {
+      strcpy (state->slot1light, "[slot1]");
   }
 
   // repeat of slottype
