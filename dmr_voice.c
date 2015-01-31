@@ -82,7 +82,7 @@ static void AssembleEmb (dsd_state *state, unsigned char lcss, unsigned char syn
   emb_fr_valid |= (1 << emb_fr_index);
 }
 
-void
+unsigned int
 processDMRvoice (dsd_opts * opts, dsd_state * state)
 {
   // extracts AMBE frames from DMR frame
@@ -97,9 +97,8 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
   unsigned char cachbits[25];
   unsigned char cach_hdr = 0, cach_hdr_hamming = 0;
   int mutecurrentslot = 0;
-  unsigned char msMode = 0;
 
-  dibit_p = state->dibit_buf_p - 144;
+  dibit_p = state->dibit_buf_p - 120;
   for (j = 0; j < 6; j++) {
       // 2nd half of previous slot
       for (i = 0; i < 54; i++) {
@@ -192,32 +191,22 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
 #if 0
           }
 #endif
-      } else { 
-          for (i = 0; i < 24; i++) {
-              dibit = *dibit_p++;
-              sync[i] = (dibit | 1) + 48;
-          }
       }
-      sync[24] = 0;
 
-      if ((strcmp (sync, DMR_BS_DATA_SYNC) == 0) || (strcmp (sync, DMR_MS_DATA_SYNC) == 0)) {
+      if ((state->lastsynctype & ~1) == 10) {
           mutecurrentslot = 1;
           if (state->currentslot == 0) {
               strcpy (state->slot0light, "[slot0]");
           } else {
               strcpy (state->slot1light, "[slot1]");
           }
-      } else if ((strcmp (sync, DMR_BS_VOICE_SYNC) == 0) || (strcmp (sync, DMR_MS_VOICE_SYNC) == 0)) {
+      } else if ((state->lastsynctype & ~1) == 12) {
           mutecurrentslot = 0;
           if (state->currentslot == 0) {
               strcpy (state->slot0light, "[SLOT0]");
           } else {
               strcpy (state->slot1light, "[SLOT1]");
           }
-      }
-
-      if ((strcmp (sync, DMR_MS_VOICE_SYNC) == 0) || (strcmp (sync, DMR_MS_DATA_SYNC) == 0)) {
-          msMode = 1;
       }
 
       // current slot frame 2 second half
@@ -250,12 +239,6 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
           total_errs += state->errs2;
       }
 
-      if ((j == 0) && (opts->errorbars == 1)) {
-          int level = (int) state->max / 164;
-          printf ("Sync: %s mod: GFSK      inlvl: %2i%% %s %s  VOICE e: %u\n",
-                  state->ftype, level, state->slot0light, state->slot1light, total_errs);
-      }
-
       // CACH
       for (i = 0; i < 12; i++) {
         dibit = getDibit (opts, state);
@@ -276,7 +259,7 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
       }
       sync[24] = 0;
 
-      if ((strcmp (sync, DMR_BS_DATA_SYNC) == 0) || (msMode == 1)) {
+      if ((strcmp (sync, DMR_BS_DATA_SYNC) == 0) || (state->dmrMsMode == 1)) {
           if (state->currentslot == 0) {
               strcpy (state->slot1light, " slot1 ");
           } else {
@@ -301,5 +284,6 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
           skipDibit (opts, state, 54);
       }
     }
+    return total_errs;
 }
 

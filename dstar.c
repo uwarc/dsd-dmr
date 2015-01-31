@@ -26,7 +26,7 @@
 #include "dstar_const.h"
 #include "descramble.h"
 
-void processDSTAR(dsd_opts * opts, dsd_state * state) {
+unsigned int processDSTAR(dsd_opts * opts, dsd_state * state) {
 	// extracts AMBE frames from D-STAR voice frame
 	int i, j, dibit;
 	char ambe_fr[4][24];
@@ -119,11 +119,7 @@ void processDSTAR(dsd_opts * opts, dsd_state * state) {
 	}
 
 end:
-    if (opts->errorbars) {
-        int level = (int) state->max / 164;
-        printf ("Sync: %s mod: GFSK      inlvl: %2i%% %s %s  VOICE e: %u\n",
-                state->ftype, level, state->slot0light, state->slot1light, total_errs);
-    }
+    return total_errs;
 }
 
 #define SCRAMBLER_TABLE_BITS_LENGTH 720
@@ -153,7 +149,7 @@ static const unsigned char SCRAMBLER_TABLE_BITS[SCRAMBLER_TABLE_BITS_LENGTH+1] =
 	1,0,0,1,1,1,0,0,1,1,1,1,0,1,1,0
 };
 
-void processDSTAR_HD(dsd_opts * opts, dsd_state * state) {
+unsigned int processDSTAR_HD(dsd_opts * opts, dsd_state * state) {
 	int radioheaderbuffer[660];
 	int radioheaderbuffer2[660];
 	unsigned int i, j, m_count = 0, bitcount = 0;
@@ -218,6 +214,6 @@ void processDSTAR_HD(dsd_opts * opts, dsd_state * state) {
 #endif
 
 	//We officially have sync now, so just pass on to the above routine:
-	processDSTAR(opts, state);
+	return processDSTAR(opts, state);
 }
 

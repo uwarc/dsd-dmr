@@ -39,6 +39,8 @@
 #define SAMPLE_RATE_OUT 8000
 #define FSK4_NTAPS  8
 #define FSK4_NSTEPS 128
+#define RRC_NZEROS 80
+#define RRC_NXZEROS 134
 
 /*
  * global variables
@@ -73,34 +75,29 @@ typedef struct
 
 typedef struct
 {
+  float xv[RRC_NXZEROS+1];
+
   float d_history[FSK4_NTAPS+1];
   unsigned int d_history_last;
   float d_symbol_clock;
   float d_symbol_spread;
   float d_symbol_time;
   float fine_frequency_correction;
-  float coarse_frequency_correction;
 
-  int *dibit_buf;
-  int *dibit_buf_p;
-  int repeat;
-  short inbuffer[4096];
-  float inbuffer2[4096];
+  unsigned char dibit_buf[48000];
+  unsigned char *dibit_buf_p;
+  short inbuffer[4608];
+  float inbuffer2[4608];
   unsigned int inbuf_pos;
   unsigned int inbuf_size;
   float audio_out_temp_buf[160];
   float *audio_out_temp_buf_p;
-  //int wav_out_bytes;
+  int synctype, lastsynctype;
   int center;
-  int jitter;
-  int synctype;
   int min;
   int max;
   int lmid;
   int umid;
-  int minref;
-  int maxref;
-  int lastsample;
   int sbuf[128];
   unsigned int sidx;
   unsigned int ssize;
@@ -109,41 +106,37 @@ typedef struct
   int midx;
   char err_str[64];
   char ftype[16];
-  int symbolcnt;
+  unsigned int symbolcnt;
   int rf_mod;
-  int numflips;
-  int lastsynctype;
   int lastp25type;
   int offset;
-  int carrier;
+  unsigned char carrier;
   unsigned int talkgroup;
   unsigned int lasttg;
   unsigned int radio_id;
   unsigned int last_radio_id;
   unsigned short nac;
+  unsigned char duid;
   unsigned short p25algid;
   unsigned short p25keyid;
   unsigned int p25kid;
   unsigned int numtdulc;
-  int errs;
   int errs2;
-  int optind;
-  int firstframe;
+  unsigned char firstframe;
+  unsigned char dmrMsMode;
   char slot0light[8];
   char slot1light[8];
   float aout_gain;
-  float aout_max_buf[200];
-  int aout_max_buf_idx;
-  int samplesPerSymbol;
-  int symbolCenter;
-  int currentslot;
+  float aout_max_buf[25];
+  unsigned int aout_max_buf_idx;
+  unsigned int samplesPerSymbol;
+  unsigned char currentslot;
   mbe_parms cur_mp;
   mbe_parms prev_mp;
   mbe_parms prev_mp_enhanced;
 
   unsigned int debug_audio_errors;
   unsigned int debug_header_errors;
-  unsigned int debug_header_critical_errors;
 
   // Last dibit read
   int last_dibit;
@@ -236,7 +229,7 @@ unsigned int Golay23_Encode(unsigned int cw);
 void Hamming15_11_3_Correct(unsigned int *codeword);
 void p25_hamming15_11_3_decode(unsigned int *codeword);
 
-int getDibit (dsd_opts * opts, dsd_state * state);
+unsigned int getDibit (dsd_opts * opts, dsd_state * state);
 void skipDibit (dsd_opts * opts, dsd_state * state, int count);
 void Shellsort_int(int *in, unsigned int n);
 
@@ -259,16 +252,16 @@ void processIMBEFrame (dsd_opts * opts, dsd_state * state, char imbe_d[88]);
 int getSymbol (dsd_opts * opts, dsd_state * state, int have_sync);
 void processEmb (dsd_state *state, unsigned char lcss, unsigned char emb_fr[4][32]);
 void processDMRdata (dsd_opts * opts, dsd_state * state);
-void processDMRvoice (dsd_opts * opts, dsd_state * state);
-void processNXDNVoice (dsd_opts * opts, dsd_state * state);
 void processNXDNData (dsd_opts * opts, dsd_state * state);
 void processX2TDMAData (dsd_opts * opts, dsd_state * state);
-void processDSTAR (dsd_opts * opts, dsd_state * state);
-void processDSTAR_HD (dsd_opts * opts, dsd_state * state);
-void process_p25_frame(dsd_opts *opts, dsd_state *state, unsigned char duid);
+unsigned int processDMRvoice (dsd_opts * opts, dsd_state * state);
+unsigned int processNXDNVoice (dsd_opts * opts, dsd_state * state);
+unsigned int processDSTAR (dsd_opts * opts, dsd_state * state);
+unsigned int processDSTAR_HD (dsd_opts * opts, dsd_state * state);
+void process_p25_frame(dsd_opts *opts, dsd_state *state);
 float get_p25_ber_estimate (dsd_state* state);
-float dmr_filter(float sample);
-float nxdn_filter(float sample);
+float dmr_filter(dsd_state *state, float sample);
+float nxdn_filter(dsd_state *state, float sample);
 
 void ReedSolomon_36_20_17_encode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* out_hex_parity);
 int ReedSolomon_36_20_17_decode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* hex_parity);

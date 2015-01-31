@@ -46,7 +46,7 @@ const char nxdnpr[145] = {
     0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 0, 1
 };
 
-void
+unsigned int
 processNXDNVoice (dsd_opts * opts, dsd_state * state)
 {
   int i, j;
@@ -67,10 +67,6 @@ processNXDNVoice (dsd_opts * opts, dsd_state * state)
     total_errs += state->errs2;
   }
 
-  if (opts->errorbars) {
-    int level = (int) state->max / 164;
-    printf ("Sync: %s mod: GFSK      inlvl: %2i%% %s %s  VOICE e: %u\n",
-            state->ftype, level, state->slot0light, state->slot1light, total_errs);
-  }
+  return total_errs;
 }
 

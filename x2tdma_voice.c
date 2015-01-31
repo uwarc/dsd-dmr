@@ -66,12 +66,12 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
   char parity;
   unsigned char cachbits[25];
   unsigned char cach_hdr = 0, cach_hdr_hamming = 0;
-  unsigned char eeei = 0, aiei = 0, burstd = 0, msMode = 0;
+  unsigned char eeei = 0, aiei = 0, burstd = 0;
   int mutecurrentslot = 0;
 
   lcinfo[56] = 0;
 
-  dibit_p = state->dibit_buf_p - 144;
+  dibit_p = state->dibit_buf_p - 120;
   for (j = 0; j < 6; j++) {
       // 2nd half of previous slot
       for (i = 0; i < 54; i++) {
@@ -132,35 +132,27 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
       }
 
       // signaling data or sync
-      for (i = 0; i < 24; i++) {
-          if (j > 0) {
+      if (j > 0) {
+          for (i = 0; i < 24; i++) {
               dibit = getDibit (opts, state);
-          } else {
-              dibit = *dibit_p++;
+              syncdata[i] = dibit;
           }
-          sync[i] = (dibit | 1) + 48;
-          syncdata[i] = dibit;
       }
-      sync[24] = 0;
 
-      if ((strcmp (sync, X2TDMA_BS_DATA_SYNC) == 0) || (strcmp (sync, X2TDMA_MS_DATA_SYNC) == 0)) {
+      if ((state->lastsynctype & ~1) == 2) {
           mutecurrentslot = 1;
           if (state->currentslot == 0) {
               strcpy (state->slot0light, "[slot0]");
           } else {
               strcpy (state->slot1light, "[slot1]");
           }
-      } else if ((strcmp (sync, X2TDMA_BS_VOICE_SYNC) == 0) || (strcmp (sync, X2TDMA_MS_VOICE_SYNC) == 0)) {
+      } else if ((state->lastsynctype & ~1) == 4) {
           mutecurrentslot = 0;
           if (state->currentslot == 0) {
               strcpy (state->slot0light, "[SLOT0]");
           } else {
               strcpy (state->slot1light, "[SLOT1]");
           }
-      }
-
-      if ((strcmp (sync, X2TDMA_MS_VOICE_SYNC) == 0) || (strcmp (sync, X2TDMA_MS_DATA_SYNC) == 0)) {
-          msMode = 1;
       }
 
       if (j == 1)
@@ -355,7 +347,7 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
       }
       sync[24] = 0;
 
-      if ((strcmp (sync, X2TDMA_BS_DATA_SYNC) == 0) || (msMode == 1)) {
+      if ((strcmp (sync, X2TDMA_BS_DATA_SYNC) == 0) || (state->dmrMsMode == 1)) {
           if (state->currentslot == 0) {
               strcpy (state->slot1light, " slot1 ");
           } else {

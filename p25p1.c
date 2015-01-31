@@ -200,7 +200,7 @@ process_IMBE (dsd_opts* opts, dsd_state* state, int* status_count)
 
           if (match) {
               // Skip this particular value. If we let it pass it will be signaled as an erroneus IMBE
-              printf("(Non-standard IMBE c0 detected, skipped)");
+              printf("(Non-standard IMBE c0 detected, skipped)\n");
           } else {
               char imbe_d[88];
               for (i = 0; i < 88; i++) {
@@ -242,7 +242,6 @@ skip_dibit(dsd_opts* opts, dsd_state* state, unsigned int count, int* status_cou
     unsigned int i;
 
     for (i = 0; i < count; i++) {
-
         if (*status_count == 35) {
             // Status bits now
             // TODO: do something useful with the status bits...
@@ -398,12 +397,10 @@ processHDU(dsd_opts* opts, dsd_state* state)
 
   state->talkgroup = talkgroup;
   state->lasttg = talkgroup;
-  if (opts->verbose > 1) {
-      printf ("mfid: %u talkgroup: %u ", mfid, talkgroup);
-      if (opts->p25enc == 1) {
-          printf ("algid: 0x%02x kid: 0x%04x ", algid, kid);
-      }
-      printf ("\n");
+  if (opts->p25enc == 1) {
+    printf ("mfid: %u talkgroup: %u algid: 0x%02x kid: 0x%04x\n", mfid, talkgroup, algid, kid);
+  } else {
+    printf ("mfid: %u talkgroup: %u\n", mfid, talkgroup);
   }
 
   if (opts->verbose > 2) {
@@ -547,10 +544,6 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   // IMBE 9
   process_IMBE (opts, state, &status_count);
 
-  if (opts->errorbars == 1) {
-      printf ("e: %u\n", state->errs2);
-  }
-
   if (opts->p25status == 1) {
       printf ("lsd1: 0x%02x, lsd2: 0x%02x ", lsd1, lsd2);
   }
@@ -564,8 +557,10 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
 
   lcformat  = (hex_data[0] & 0xFF);
   mfid  = ((hex_data[0] >> 8) & 0xFF);
-  if (opts->verbose > 0) {
-      printf ("mfid: %u, lcformat: 0x%02x, lcinfo: 0x%02x 0x%06x 0x%06x\n", mfid, lcformat, (hex_data[0] >> 16), hex_data[1], hex_data[2]);
+  if (opts->errorbars == 1) {
+      printf ("LDU1: e: %u, talkgroup: %u, src: %u, mfid: %u, lcformat: 0x%02x, lcinfo: 0x%02x 0x%06x 0x%06x\n",
+              state->errs2, state->lasttg, state->last_radio_id, mfid, lcformat,
+              (hex_data[0] >> 16), hex_data[1], hex_data[2]);
   }
 }
 
@@ -650,10 +645,6 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   // IMBE 9
   process_IMBE (opts, state, &status_count);
 
-  if (opts->errorbars == 1) {
-      printf ("e: %u\n", state->errs2);
-  }
-
   if (opts->p25status == 1) {
       printf ("lsd1: 0x%02x, lsd2: 0x%02x ", lsd1, lsd2);
   }
@@ -673,30 +664,23 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
       printf ("algid: 0x%02x kid: 0x%04x\n", algid, kid);
   }
 
-  if (opts->verbose > 2) {
-    printf ("mi: 0x%04x 0x%04x 0x%04x\n", hex_data[0], hex_data[1], hex_data[2]);
+  if (opts->errorbars == 1) {
+    printf ("LDU2: e: %u, talkgroup: %u, src: %u, mi: 0x%04x 0x%04x 0x%04x\n",
+            state->errs2, state->lasttg, state->last_radio_id, hex_data[0], hex_data[1], hex_data[2]);
   }
 }
 
 static void
 processTDU (dsd_opts* opts, dsd_state* state)
 {
-    int status_count;
-
     // we skip the status dibits that occur every 36 symbols
     // the first IMBE frame starts 14 symbols before next status
     // so we start counter at 36-14-1 = 21
-    status_count = 21;
 
     // Next 14 dibits should be zeros
-    skip_dibit(opts, state, 14, &status_count);
+    skipDibit(opts, state, 14);
 
     // Next we should find an status dibit
-    if (status_count != 35) {
-        printf("*** SYNC ERROR\n");
-    }
-
-    // trailing status symbol
     {
         //int status = getDibit (opts, state) + '0';
         getDibit (opts, state);
@@ -762,7 +746,7 @@ processTDULC (dsd_opts* opts, dsd_state* state)
 
   // Next we should find an status dibit
   if (status_count != 35) {
-      printf("*** SYNC ERROR\n");
+      //printf("*** SYNC ERROR\n");
   }
 
   // trailing status symbol
@@ -815,53 +799,36 @@ processTDULC (dsd_opts* opts, dsd_state* state)
   }
 }
 
-static void print_p25_frameinfo (dsd_opts * opts, dsd_state * state, char *p25frametype)
+void process_p25_frame(dsd_opts *opts, dsd_state *state)
 {
-  int level = (int) state->max / 164;
-  printf ("inlvl: %2i%% ", level);
-  if (state->nac != 0) {
-      printf ("nac: %4X ", state->nac);
+  unsigned char duid = state->duid;
+
+  if ((duid == 5) || ((duid == 10) && (state->lastp25type == 1)) || (duid == 12)) {
+      if ((opts->mbe_out_dir[0] != 0) && (opts->mbe_out_fd == -1)) {
+          openMbeOutFile (opts, state);
+      }
   }
 
-  if (opts->verbose > 1) {
-      printf ("src: %8u ", state->last_radio_id);
-  }
-  printf ("tg: %5u %s", state->lasttg, p25frametype);
-}
-
-void process_p25_frame(dsd_opts *opts, dsd_state *state, unsigned char duid)
-{
   if (duid == 0) {
       // Header Data Unit
-      print_p25_frameinfo (opts, state, "HDU\n");
       state->lastp25type = 2;
       processHDU (opts, state);
   } else if (duid == 5) { // 11 -> 0101 = 5
       // Logical Link Data Unit 1
-      print_p25_frameinfo (opts, state, "LDU1 ");
-      if ((opts->mbe_out_dir[0] != 0) && (opts->mbe_out_fd == -1)) {
-          openMbeOutFile (opts, state);
-      }
       state->lastp25type = 1;
       state->numtdulc = 0;
       processLDU1 (opts, state);
   } else if (duid == 10) { // 22 -> 1010 = 10
       // Logical Link Data Unit 2
       if (state->lastp25type != 1) {
-          print_p25_frameinfo (opts, state, "Ignoring LDU2 not preceeded by LDU1\n");
+          printf("Ignoring LDU2 not preceeded by LDU1\n");
           state->lastp25type = 0;
       } else {
-          print_p25_frameinfo (opts, state, "LDU2 ");
-          if ((opts->mbe_out_dir[0] != 0) && (opts->mbe_out_fd == -1)) {
-              openMbeOutFile (opts, state);
-          }
           state->lastp25type = 2;
           state->numtdulc = 0;
           processLDU2 (opts, state);
       }
-  } else if (duid == 15) { // 33 -> 1111 = 15
-      // Terminator with subsequent Link Control
-      print_p25_frameinfo (opts, state, "TDULC\n");
+  } else if ((duid == 3) || (duid == 15)) {
       if (opts->mbe_out_dir[0] != 0) {
           closeMbeOutFile (opts, state);
       }
@@ -870,37 +837,24 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state, unsigned char duid)
       state->last_radio_id = 0;
       state->lastp25type = 0;
       state->err_str[0] = 0;
-      state->numtdulc++;
-      processTDULC (opts, state);
-      state->err_str[0] = 0;
-  } else if (duid == 3) {
-      // Terminator without subsequent Link Control
-      print_p25_frameinfo (opts, state, "TDU\n");
-      if (opts->mbe_out_dir[0] != 0) {
-          closeMbeOutFile (opts, state);
+      if (duid == 3) {
+        // Terminator without subsequent Link Control
+        processTDU (opts, state);
+      } else {
+        // Terminator with subsequent Link Control
+        state->numtdulc++;
+        processTDULC (opts, state);
       }
-      mbe_initMbeParms (&state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced);
-      state->lasttg = 0;
-      state->last_radio_id = 0;
-      state->lastp25type = 0;
-      state->err_str[0] = 0;
-      processTDU (opts, state);
   } else if (duid == 7) { // 13 -> 0111 = 7
-      print_p25_frameinfo (opts, state, "TSDU\n");
       state->lasttg = 0;
       state->last_radio_id = 0;
       state->lastp25type = 3;
       // Now processing NID
       skipDibit (opts, state, 328-25);
   } else if (duid == 12) { // 30 -> 1100 = 12
-      print_p25_frameinfo (opts, state, "PDU\n");
-      if ((opts->mbe_out_dir[0] != 0) && (opts->mbe_out_fd == -1)) {
-          openMbeOutFile (opts, state);
-      }
       state->lastp25type = 4;
   // try to guess based on previous frame if unknown type
   } else if (state->lastp25type == 1) { 
-      print_p25_frameinfo (opts, state, "(LDU2) ");
       if ((opts->mbe_out_dir[0] != 0) && (opts->mbe_out_fd == -1)) {
           openMbeOutFile (opts, state);
       }
@@ -908,9 +862,9 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state, unsigned char duid)
       // Guess that the state is LDU2
       state->lastp25type = 2;
       state->numtdulc = 0;
+      printf("(LDU2)\n");
       processLDU2 (opts, state);
   } else if (state->lastp25type == 2) {
-      print_p25_frameinfo (opts, state, "(LDU1) ");
       if ((opts->mbe_out_dir[0] != 0) && (opts->mbe_out_fd == -1)) {
           openMbeOutFile (opts, state);
       }
@@ -918,21 +872,21 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state, unsigned char duid)
       // Guess that the state is LDU1
       state->lastp25type = 1;
       state->numtdulc = 0;
+      printf("(LDU1)\n");
       processLDU1 (opts, state);
   } else if (state->lastp25type == 3) {
-      print_p25_frameinfo (opts, state, "(TSDU)\n");
+      printf("(TSDU)\n");
       //state->lastp25type = 0;
       // Guess that the state is TSDU
       state->lastp25type = 3;
       // Now processing NID
       skipDibit (opts, state, 328-25);
   } else if (state->lastp25type == 4) {
-      print_p25_frameinfo (opts, state, "(PDU)\n");
+      printf("(PDU)\n");
       state->lastp25type = 0;
   } else { 
       state->lastp25type = 0;
-      print_p25_frameinfo (opts, state, "Unknown DUID: ");
-      printf ("0x%x\n", duid);
+      printf ("Unknown DUID: 0x%x\n", duid);
   }
 }
 

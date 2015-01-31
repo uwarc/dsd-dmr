@@ -117,71 +117,69 @@ get_p25_nac_and_duid(dsd_opts *opts, dsd_state *state)
 #endif
   } else {
       // Check of NID failed and unable to recover its value
-      //printf("NID error\n");
-      //duid = -1;
-      state->debug_header_critical_errors++;
+      printf("NID error\n");
+      //state->debug_header_critical_errors++;
   }
   state->nac = nac;
-  return duid;
+  state->duid = duid;
+  return (check_result >= 0);
 }
 
 void
 processFrame (dsd_opts * opts, dsd_state * state)
 {
+  int level = (int) state->max / 164;
+  unsigned int total_errs = 0, synctype = (state->synctype >> 1);
+
   state->lasttg = 0;
   state->last_radio_id = 0;
   state->nac = 0;
+  state->duid = 0;
 
-  if ((state->synctype == 8) || (state->synctype == 9) ||
-      (state->synctype == 6) || (state->synctype == 7) ||
-      (state->synctype == 18) || (state->synctype == 19) ||
-      (state->synctype == 11) || (state->synctype == 12) ||
-      (state->synctype == 3) || (state->synctype == 4)) {
-      if ((opts->mbe_out_dir[0] != 0) && (opts->mbe_out_fd == -1)) {
-          openMbeOutFile (opts, state);
-      }
-  }
-
-  if ((state->synctype == 8) || (state->synctype == 9)) {
-      processNXDNVoice (opts, state);
-      return;
-  } else if ((state->synctype == 16) || (state->synctype == 17)) {
+  if (synctype == 8) {
       state->err_str[0] = 0;
       processNXDNData (opts, state);
       return;
-  } else if ((state->synctype == 6) || (state->synctype == 7)) {
-      processDSTAR (opts, state);
+  } else if (synctype == 5) {
+      state->err_str[0] = 0;
+      processDMRdata (opts, state);
       return;
-  } else if ((state->synctype == 18) || (state->synctype == 19)) {
-      processDSTAR_HD (opts, state);
-      return;
-  } else if ((state->synctype >= 10) && (state->synctype <= 13)) {
-      state->lasttg = 0;
-      if ((state->synctype == 11) || (state->synctype == 12)) {
-          processDMRvoice (opts, state);
-      } else {
-          state->err_str[0] = 0;
-          processDMRdata (opts, state);
-      }
-      return;
-#if 0
-  } else if ((state->synctype >= 2) && (state->synctype <= 5)) {
-      if ((state->synctype == 3) || (state->synctype == 4)) {
-          processX2TDMAvoice (opts, state);
-      } else {
-          state->err_str[0] = 0;
-          processX2TDMAData (opts, state);
-      }
-      return;
-#endif
-  } else {
-      unsigned char duid = get_p25_nac_and_duid(opts, state);
-      int level = (int) state->max / 164;
-      printf ("Sync: %s mod: %s offs: %u      inlvl: %2i%% p25 NAC: 0x%03x, DUID: 0x%x -> %s\n",
-              state->ftype, ((state->rf_mod == 2) ? "GFSK" : "QPSK"), state->offset, level,
-              state->nac, duid, p25frametypes[duid]);
-      process_p25_frame (opts, state, duid);
+  } else if (synctype == 1) {
+      state->err_str[0] = 0;
+      processX2TDMAData (opts, state);
       return;
   }
+
+  if (synctype == 0) {
+      unsigned char ret = get_p25_nac_and_duid(opts, state);
+      printf ("Sync: %s mod: %s offs: %u      inlvl: %2i%% p25 NAC: 0x%03x, DUID: 0x%x -> %s\n",
+              state->ftype, ((state->rf_mod == 2) ? "GFSK" : "QPSK"), state->offset, level,
+              state->nac, state->duid, p25frametypes[state->duid]);
+      if (ret) {
+        process_p25_frame (opts, state);
+      }
+      return;
+  }
+
+  if ((opts->mbe_out_dir[0] != 0) && (opts->mbe_out_fd == -1)) {
+    openMbeOutFile (opts, state);
+  }
+
+  if (synctype == 4) {
+      total_errs = processNXDNVoice (opts, state);
+  } else if (synctype == 3) {
+      total_errs = processDSTAR (opts, state);
+  } else if (synctype == 9) {
+      total_errs = processDSTAR_HD (opts, state);
+  } else if (synctype == 6) {
+      total_errs = processDMRvoice (opts, state);
+#if 0
+  } else if (synctype == 2) {
+      processX2TDMAvoice (opts, state);
+#endif
+  }
+  printf ("Sync: %s mod: GFSK      inlvl: %2i%% %s %s  VOICE e: %u\n",
+          state->ftype, level, state->slot0light, state->slot1light, total_errs);
+  return;
 }
 
