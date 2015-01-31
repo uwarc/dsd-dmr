@@ -50,17 +50,17 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
    *  0 = +P25p1
    *  1 = -P25p1
    *  2 = +X2-TDMA (non inverted signal data frame)
-   *  3 = -X2-TDMA (inverted signal voice frame)
+   *  3 = -X2-TDMA (inverted signal data frame)
    *  4 = +X2-TDMA (non inverted signal voice frame)
-   *  5 = -X2-TDMA (inverted signal data frame)
+   *  5 = -X2-TDMA (inverted signal voice frame)
    *  6 = +D-STAR
    *  7 = -D-STAR
    *  8 = +NXDN (non inverted voice frame)
    *  9 = -NXDN (inverted voice frame)
    * 10 = +DMR (non inverted signal data frame)
-   * 11 = -DMR (inverted signal voice frame)
+   * 11 = -DMR (inverted signal data frame)
    * 12 = +DMR (non inverted signal voice frame)
-   * 13 = -DMR (inverted signal data frame)
+   * 13 = -DMR (inverted signal voice frame)
    * 16 = +NXDN (non inverted data frame)
    * 17 = -NXDN (inverted data frame)
    * 18 = +D-STAR_HD
@@ -115,18 +115,10 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
           lastt++;
       }
 
-      //if (state->dibit_buf_p > state->dibit_buf + 900000) {
-      //if (state->dibit_buf_p > state->dibit_buf + 72000) {
-      if (state->dibit_buf_p > state->dibit_buf + 48000) {
-    	  state->dibit_buf_p = state->dibit_buf + 200;
-      }
-
       //determine dibit state
       if (symbol > 0) {
-          *state->dibit_buf_p++ = 1;
           dibit = 49;               // '1'
       } else {
-          *state->dibit_buf_p++ = 3;
           dibit = 51;               // '3'
       }
 
@@ -139,8 +131,6 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
           Shellsort_int (lbuf2, 24);
           lmin = (lbuf2[2] + lbuf2[3] + lbuf2[4]) / 3;
           lmax = (lbuf2[21] + lbuf2[20] + lbuf2[19]) / 3;
-          state->maxref = state->max;
-          state->minref = state->min;
           if (opts->datascope && (lidx == 0)) {
             print_datascope(state, lbuf2, 24);
           }
@@ -167,6 +157,7 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             state->offset = synctest_pos;
             state->max = ((state->max) + (lmax)) / 2;
             state->min = ((state->min) + (lmin)) / 2;
+            state->dmrMsMode = (synctest[22] == '1');
             if (opts->inverted_dmr == 0) {
                 // data frame
                 strcpy (state->ftype, " +DMR      ");
@@ -177,10 +168,10 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             } else {
                 // inverted voice frame
                 strcpy (state->ftype, " -DMR      ");
-                if (state->lastsynctype != 11) {
+                if (state->lastsynctype != 13) {
                     state->firstframe = 1;
                 }
-                state->lastsynctype = 11;
+                state->lastsynctype = 13;
             }
             return state->lastsynctype;
           }
@@ -190,6 +181,7 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             state->offset = synctest_pos;
             state->max = ((state->max) + lmax) / 2;
             state->min = ((state->min) + lmin) / 2;
+            state->dmrMsMode = (synctest[22] == '3');
             if (opts->inverted_dmr == 0) {
                 // voice frame
                 strcpy (state->ftype, " +DMR      ");
@@ -200,10 +192,10 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             } else {
                 // inverted data frame
                 strcpy (state->ftype, " -DMR      ");
-                if (state->lastsynctype != 13) {
+                if (state->lastsynctype != 11) {
                     state->firstframe = 1;
                 }
-                state->lastsynctype = 13;
+                state->lastsynctype = 11;
             }
             return state->lastsynctype;
           }
@@ -213,6 +205,7 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             state->offset = synctest_pos;
             state->max = ((state->max) + (lmax)) / 2;
             state->min = ((state->min) + (lmin)) / 2;
+            state->dmrMsMode = (synctest[22] == '1');
             if (opts->inverted_x2tdma == 0) {
                 // data frame
                 strcpy (state->ftype, " +X2-TDMA     ");
@@ -223,7 +216,7 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
                 if (state->lastsynctype != 3) {
                    state->firstframe = 1;
                 }
-                state->lastsynctype = 3;
+                state->lastsynctype = 5;
             }
             return state->lastsynctype;
           }
@@ -234,6 +227,7 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             state->offset = synctest_pos;
             state->max = ((state->max) + lmax) / 2;
             state->min = ((state->min) + lmin) / 2;
+            state->dmrMsMode = (synctest[22] == '3');
             if (opts->inverted_x2tdma == 0) {
                 // voice frame
                 strcpy (state->ftype, " +X2-TDMA     ");
@@ -244,7 +238,7 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             } else {
                 // inverted data frame
                 strcpy (state->ftype, " -X2-TDMA     ");
-                state->lastsynctype = 5;
+                state->lastsynctype = 3;
             }
             return state->lastsynctype;
           }
@@ -348,7 +342,8 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
           // buffer reset
           synctest_pos = 0;
           synctest_p = synctest_buf;
-          noCarrier (opts, state);
+          state->lastsynctype = -1;
+          state->carrier = 0;
       }
 
       if (state->lastsynctype != -1) {
@@ -356,7 +351,8 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
               if (state->carrier == 1) {
                   printf ("Sync: no sync\n");
               }
-              noCarrier (opts, state);
+              state->lastsynctype = -1;
+              state->carrier = 0;
               return (-1);
           }
       }
