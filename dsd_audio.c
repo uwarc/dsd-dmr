@@ -27,7 +27,6 @@ openAudioInDevice (dsd_opts *opts, const char *audio_in_dev)
       opts->audio_in_type = 1;
       opts->audio_in_fd = open(audio_in_dev, O_RDONLY);
       if(opts->audio_in_fd < 0) {
-          printf ("Error, couldn't open file %s\n", audio_in_dev);
           return -1;
       }
   }

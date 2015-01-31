@@ -101,7 +101,7 @@ void processDSTAR(dsd_opts * opts, dsd_state * state) {
 			sync_missed = 0;
 		} else if ((bitbuffer & 0x00FFFFFF) == 0xAAAAAA) {
 			//End of transmission
-			printf("End of transmission\n");
+			//printf("End of transmission\n");
 			goto end;
 		} else if (framecount % 21 == 0) {
 			printf("Missed sync on framecount = %d, value = %x/%x/%x\n",
@@ -121,9 +121,8 @@ void processDSTAR(dsd_opts * opts, dsd_state * state) {
 end:
     if (opts->errorbars) {
         int level = (int) state->max / 164;
-        printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  VOICE e: %u\n",
-                state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"),
-                level, state->slot0light, state->slot1light, total_errs);
+        printf ("Sync: %s mod: GFSK      inlvl: %2i%% %s %s  VOICE e: %u\n",
+                state->ftype, level, state->slot0light, state->slot1light, total_errs);
     }
 }
 

@@ -4,8 +4,8 @@
 void
 processNXDNData (dsd_opts * opts, dsd_state * state)
 {
-  int i, dibit;
-  int *dibit_p;
+  unsigned int i, dibit;
+  unsigned char *dibit_p;
   char lich[9];
   char lich_scram[9] = { 0, 0, 1, 0, 0, 1, 1, 1, 0 };
   dibit_p = state->dibit_buf_p - 8;
@@ -18,29 +18,14 @@ processNXDNData (dsd_opts * opts, dsd_state * state)
       lich[i] = 1 & (dibit >> 1);
   }
 
+  closeMbeOutFile (opts, state);
+
   if (opts->errorbars) {
       int level = (int) state->max / 164;
-      printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  DATA: ",
-              state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"),
-              level, state->slot0light, state->slot1light);
-      switch((lich[0] << 1) | lich[1]) {
-        case 0:
-          printf("Trunk-C Control Ch ");
-          break;
-        case 1:
-          printf("Trunk-C Traffic Ch ");
-          break;
-        case 2:
-          if(lich[6])
-            printf("Repeater Ch ");
-          else
-            printf("Mobile Direct Ch ");
-          break;
-        case 3:
-          printf("Trunk-D Composite Ch ");
-          break;
-      }
-      printf("\n");
+      printf ("Sync: %s mod: GFSK      inlvl: %2i%% %s %s  DATA: %s Ch\n",
+              state->ftype, level, state->slot0light, state->slot1light,
+              (lich[1] ? (lich[0] ? "Trunk-C Traffic" : "Trunk-D Composite") 
+                       : (lich[0] ? "Trunk-C Control" : (lich[6] ? "Repeater" : "Mobile Direct"))));
   }
 
   skipDibit (opts, state, 174);
@@ -64,8 +49,8 @@ const char nxdnpr[145] = {
 void
 processNXDNVoice (dsd_opts * opts, dsd_state * state)
 {
-  int i, j, dibit;
-  unsigned int total_errs = 0;
+  int i, j;
+  unsigned int dibit, total_errs = 0;
   char ambe_fr[4][24];
   const char *pr;
 
@@ -84,9 +69,8 @@ processNXDNVoice (dsd_opts * opts, dsd_state * state)
 
   if (opts->errorbars) {
     int level = (int) state->max / 164;
-    printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  VOICE e: %u\n",
-            state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"),
-            level, state->slot0light, state->slot1light, total_errs);
+    printf ("Sync: %s mod: GFSK      inlvl: %2i%% %s %s  VOICE e: %u\n",
+            state->ftype, level, state->slot0light, state->slot1light, total_errs);
   }
 }
 

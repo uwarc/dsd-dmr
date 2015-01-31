@@ -55,7 +55,7 @@ static unsigned int emb_fr_valid = 0;
 
 static void AssembleEmb (dsd_state *state, unsigned char lcss, unsigned char syncdata[16])
 {
-  int i, dibit;
+  unsigned int i, dibit;
 
   switch(lcss) {
     case 0: //Single fragment LC or first fragment CSBK signalling (used for Reverse Channel)
@@ -86,9 +86,9 @@ void
 processDMRvoice (dsd_opts * opts, dsd_state * state)
 {
   // extracts AMBE frames from DMR frame
-  int i, j, dibit;
-  int *dibit_p;
-  unsigned int total_errs = 0;
+  int i, j;
+  unsigned int dibit, total_errs = 0;
+  unsigned char *dibit_p;
   char ambe_fr[4][24];
   char ambe_fr2[4][24];
   char ambe_fr3[4][24];
@@ -252,9 +252,8 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
 
       if ((j == 0) && (opts->errorbars == 1)) {
           int level = (int) state->max / 164;
-          printf ("Sync: %s mod: %s      inlvl: %2i%% %s %s  VOICE e: %u\n",
-                  state->ftype, ((state->rf_mod == 2) ? "GFSK" : "C4FM"), level,
-                  state->slot0light, state->slot1light, total_errs);
+          printf ("Sync: %s mod: GFSK      inlvl: %2i%% %s %s  VOICE e: %u\n",
+                  state->ftype, level, state->slot0light, state->slot1light, total_errs);
       }
 
       // CACH

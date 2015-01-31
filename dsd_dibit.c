@@ -18,13 +18,13 @@
 #include <assert.h>
 #include "dsd.h"
 
-static int
-invert_dibit(int dibit)
+static unsigned int 
+invert_dibit(unsigned int dibit)
 {
     return (dibit ^ 2);
 }
 
-static int digitize (dsd_state* state, int symbol)
+static unsigned int digitize (dsd_state* state, int symbol)
 {
   // determine dibit state
   if ((state->synctype == 6) || (state->synctype == 7) ||
@@ -36,7 +36,7 @@ static int digitize (dsd_state* state, int symbol)
       // 15 -ProVoice
       // 18 +D-STAR_HD
       // 19 -D-STAR_HD
-      int dibit;
+      unsigned int dibit;
       if (symbol > state->center) {
         dibit = 0;
       } else {
@@ -62,7 +62,7 @@ static int digitize (dsd_state* state, int symbol)
       // 13 -DMR (inverted signal data frame)
       // 16 +NXDN (non inverted data frame)
       // 17 -NXDN (inverted data frame)
-      int dibit;
+      unsigned int dibit;
 
       // Choose the symbol according to the regions delimited by center, umid and lmid
       if (symbol > state->center) {
@@ -92,14 +92,11 @@ static int digitize (dsd_state* state, int symbol)
  * \brief This important method reads the last analog signal value (getSymbol call) and digitizes it.
  * Depending of the ongoing transmission it in converted into a bit (0/1) or a di-bit (00/01/10/11).
  */
-int
+unsigned int
 getDibit (dsd_opts* opts, dsd_state* state)
 {
-  int symbol, dibit;
-
-  state->numflips = 0;
-  symbol = getSymbol (opts, state, 1);
-
+  unsigned int dibit;
+  int symbol = getSymbol (opts, state, 1);
   state->sbuf[state->sidx] = symbol;
 
 #if 0
@@ -135,14 +132,6 @@ getDibit (dsd_opts* opts, dsd_state* state)
     state->center = ((state->max) + (state->min)) / 2;
     state->umid = (((state->max) - state->center) * 5 / 8) + state->center;
     state->lmid = (((state->min) - state->center) * 5 / 8) + state->center;
-    state->maxref = (int)((state->max) * 0.80F);
-    state->minref = (int)((state->min) * 0.80F);
-  } else {
-#endif
-    // in c4fm min/max must only be updated during sync
-    state->maxref = state->max;
-    state->minref = state->min;
-#if 0
   }
 #endif
 
@@ -153,8 +142,8 @@ getDibit (dsd_opts* opts, dsd_state* state)
       state->sidx++;
   }
 
-  if (state->dibit_buf_p > state->dibit_buf + 48000) {
-    state->dibit_buf_p = state->dibit_buf + 200;
+  if (state->dibit_buf_p > state->dibit_buf + 1024) {
+    state->dibit_buf_p = state->dibit_buf + 256;
   }
 
   dibit = digitize (state, symbol);
