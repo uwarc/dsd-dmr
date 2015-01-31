@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <math.h>
+#include "dsd.h"
 
 // DMR filter
 // Filter details ..
@@ -10,8 +11,6 @@
 // impulselen	 =	 81
 // racos	 =	 sqrt
 // comp	 =	 no
-#define NZEROS 80
-static float xv[NZEROS+1];
 
 float ngain = 0.101333437f;
 static float xcoeffs[84] = {
@@ -39,10 +38,7 @@ static float xcoeffs[84] = {
 };
 
 // NXDN filter
-#define NXZEROS 134
 float nxgain = 0.062659371644565f;
-
-static float nxv[NXZEROS+1];
 
 static float nxcoeffs[] = {
   +0.031462429, +0.031747267, +0.030401148, +0.027362877,
@@ -160,30 +156,30 @@ static float scalarproduct_float_c(float *v1, float *v2, unsigned int len)
 #endif
 
 float
-dmr_filter(float sample)
+dmr_filter(dsd_state *state, float sample)
 {
   float sum = 0.0f;
   unsigned int i;
 
-  for (i = 0; i < NZEROS; i++)
-    xv[i] = xv[i+1];
+  for (i = 0; i < RRC_NZEROS; i++)
+    state->xv[i] = state->xv[i+1];
 
-  xv[NZEROS] = sample; // unfiltered sample in
-  sum = scalarproduct_float(xv, xcoeffs, 84);
+  state->xv[RRC_NZEROS] = sample; // unfiltered sample in
+  sum = scalarproduct_float(state->xv, xcoeffs, 84);
   return (sum * ngain); // filtered sample out
 }
 
 float
-nxdn_filter(float sample)
+nxdn_filter(dsd_state *state, float sample)
 {
   float sum = 0.0f;
   unsigned int i;
 
-  for (i = 0; i < NXZEROS; i++)
-    nxv[i] = nxv[i+1];
+  for (i = 0; i < RRC_NXZEROS; i++)
+    state->xv[i] = state->xv[i+1];
 
-  nxv[NXZEROS] = sample; // unfiltered sample in
-  sum = scalarproduct_float(nxv, nxcoeffs, 136);
+  state->xv[RRC_NXZEROS] = sample; // unfiltered sample in
+  sum = scalarproduct_float(state->xv, nxcoeffs, 136);
   return (sum * nxgain); // filtered sample out
 }
 

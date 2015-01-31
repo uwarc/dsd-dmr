@@ -36,9 +36,9 @@ void print_datascope(dsd_state *state, int *lbuf2, unsigned int lsize)
     if (state->symbolcnt > (4800 / SCOPERATE)) {
         state->symbolcnt = 0;
         write(1, "\033[14A", 5);
-        printf ("\nDemod mode: %s, Min: %d, Max: %d, LMid: %d, UMid: %d, Center: %d, Jitter: %d, Symbol_Rate: %d\n",
+        printf ("\nDemod mode: %s, Min: %d, Max: %d, LMid: %d, UMid: %d, Center: %d, Symbol_Rate: %d\n",
                 modulations[state->rf_mod], state->min, state->max, state->lmid, state->umid, state->center,
-                state->jitter, state->samplesPerSymbol);
+                state->samplesPerSymbol);
         write(1, separator, 67);
         for (i = 0; i < 10; i++) {
             char buf[67];

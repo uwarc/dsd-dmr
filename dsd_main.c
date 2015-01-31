@@ -58,36 +58,24 @@ noCarrier (dsd_opts * opts, dsd_state * state)
 {
   unsigned int i;
 
-  state->dibit_buf_p = state->dibit_buf + 200;
-  for (i = 0; i < 200; i++) {
+  state->dibit_buf_p = state->dibit_buf + 128;
+  for (i = 0; i < 128; i++) {
     state->dibit_buf[i] = 0;
   }
-  state->inbuf_size = 4096;
-  state->inbuf_pos = 4096;
-  state->jitter = -1;
   state->lastsynctype = -1;
   state->carrier = 0;
-  state->max = 15000;
-  state->min = -15000;
-  state->center = 0;
   state->err_str[0] = 0;
   strcpy (state->ftype, "       ");
-  state->errs = 0;
   state->errs2 = 0;
   state->lasttg = 0;
   state->last_radio_id = 0;
   state->lastp25type = 0;
-  state->repeat = 0;
   state->nac = 0;
+  state->duid = 0;
   state->numtdulc = 0;
   strcpy (state->slot0light, " slot0 ");
   strcpy (state->slot1light, " slot1 ");
   state->firstframe = 0;
-  if (opts->audio_gain == (float) 0) {
-      state->aout_gain = 25;
-  }
-  memset (state->aout_max_buf, 0, sizeof (float) * 200);
-  state->aout_max_buf_idx = 0;
   mbe_initMbeParms (&state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced);
 }
 
@@ -97,7 +85,7 @@ static inline void initOpts (dsd_opts * opts)
   opts->datascope = 0;
   opts->verbose = 2;
   opts->p25enc = 0;
-  opts->p25status = 1;
+  opts->p25status = 0;
   opts->p25tg = 0;
   opts->audio_in_fd = -1;
   opts->mbe_out_dir[0] = 0;
@@ -116,25 +104,19 @@ static void initState (dsd_state * state)
 {
   int i;
 
-  //state->dibit_buf = malloc (sizeof (int) * 1048576);
-  state->dibit_buf = mmap(NULL, sizeof (int) * 1048576, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON|MAP_NORESERVE, -1, 0);
-  state->dibit_buf_p = state->dibit_buf + 200;
-  state->repeat = 0;
+  state->dibit_buf_p = state->dibit_buf + 128;
   state->audio_out_temp_buf_p = state->audio_out_temp_buf;
   //state->wav_out_bytes = 0;
   state->inbuf_size = 4096;
   state->inbuf_pos = 4096;
   state->samplesPerSymbol = 10;
-  state->center = 0;
-  state->jitter = -1;
   state->synctype = -1;
+  state->lastsynctype = -1;
   state->min = -15000;
   state->max = 15000;
   state->lmid = 0;
   state->umid = 0;
-  state->minref = -12000;
-  state->maxref = 12000;
-  state->lastsample = 0;
+  state->center = 0;
   for (i = 0; i < 128; i++) {
       state->sbuf[i] = 0;
   }
@@ -157,30 +139,27 @@ static void initState (dsd_state * state)
   strcpy (state->ftype, "          ");
   state->symbolcnt = 0;
   state->rf_mod = 2;
-  state->numflips = 0;
-  state->lastsynctype = -1;
   state->offset = 0;
   state->carrier = 0;
-  state->lasttg = 0;
   state->talkgroup = 0;
   state->lasttg = 0;
   state->radio_id = 0;
   state->numtdulc = 0;
-  state->errs = 0;
   state->errs2 = 0;
-  state->optind = 0;
   state->firstframe = 0;
   strcpy (state->slot0light, " slot0 ");
   strcpy (state->slot1light, " slot1 ");
   state->aout_gain = 25;
-  memset (state->aout_max_buf, 0, sizeof (float) * 200);
+  for (i = 0; i < 25; i++) {
+    state->aout_max_buf[i] = 0.0f;
+  }
   state->aout_max_buf_idx = 0;
   state->currentslot = 0;
+  state->dmrMsMode = 0;
   mbe_initMbeParms (&state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced);
 
   state->debug_audio_errors = 0;
   state->debug_header_errors = 0;
-  state->debug_header_critical_errors = 0;
 
 #ifdef TRACE_DSD
   state->debug_sample_index = 0;
@@ -189,33 +168,60 @@ static void initState (dsd_state * state)
 #endif
 }
 
+static const unsigned char static_hdr_portion[20] = {
+   0x52, 0x49, 0x46, 0x46, 0xFF, 0xFF, 0xFF, 0x7F,
+   0x57, 0x41, 0x56, 0x45, 0x66, 0x6D, 0x74, 0x20,
+   0x10, 0x00, 0x00, 0x00
+};
+
+typedef struct _WAVHeader {
+    uint16_t wav_id;
+    uint16_t channels;
+    uint32_t samplerate;
+    uint32_t bitrate;
+    uint32_t block_align;
+    uint32_t pad0;
+    uint32_t pad1;
+} __attribute__((packed)) WAVHeader;
+
+static void write_wav_header(int fd, uint32_t rate)
+{
+   WAVHeader w;
+   write(fd, &static_hdr_portion, 20);
+
+   w.wav_id = 1;
+   w.channels = 1;
+   w.samplerate = rate;
+   w.bitrate = rate*2;
+   w.block_align = 0x00100010;
+   w.pad0 = 0x61746164;
+   w.pad1 = 0x7fffffff;
+   write(fd, &w, sizeof(WAVHeader));
+}
+
 static void usage ()
 {
-  printf ("\n");
-  printf ("Usage:\n");
-  printf ("  dsd [options]            Live scanner mode\n");
-  printf ("  dsd -h                   Show help\n");
-  printf ("\n");
-  printf ("Display Options:\n");
-  printf ("  -e            Show Frame Info and errorbars (default)\n");
-  printf ("  -q            Don't show Frame Info/errorbars\n");
-  printf ("  -s            Datascope (disables other display options)\n");
-  printf ("  -v <num>      Frame information Verbosity\n");
-  printf ("\n");
-  printf ("Input/Output options:\n");
-  printf ("  -i <device>   Audio input device (default is /dev/audio, - for piped stdin)\n");
-  printf ("  -d <dir>      Create mbe data files, use this directory\n");
-  printf ("  -g <num>      Audio output gain (default = 0 = auto, disable = -1)\n");
-  printf ("  -w <file>     Output synthesized speech to a .wav file\n");
-  printf ("\n");
-  printf ("Decoder options:\n");
-  printf ("  -u <num>      Unvoiced speech quality (default=3)\n");
-  printf ("  -xx           Expect non-inverted X2-TDMA signal\n");
-  printf ("  -xr           Expect inverted DMR/MOTOTRBO signal\n");
-  printf ("\n");
-  printf ("Advanced decoder options:\n");
-  printf ("  -S <num>      Symbol buffer size for QPSK decision point tracking\n");
-  printf ("                 (default=36)\n");
+  const char *usage_str = "Usage:\n"
+  "  dsd [options]            Live scanner mode\n"
+  "  dsd -h                   Show help\n\n"
+  "Display Options:\n"
+  "  -e            Show Frame Info and errorbars (default)\n"
+  "  -q            Don't show Frame Info/errorbars\n"
+  "  -s            Datascope (disables other display options)\n"
+  "  -v <num>      Frame information Verbosity\n\n"
+  "Input/Output options:\n"
+  "  -i <device>   Audio input device (default is /dev/audio, - for piped stdin)\n"
+  "  -d <dir>      Create mbe data files, use this directory\n"
+  "  -g <num>      Audio output gain (default = 0 = auto, disable = -1)\n"
+  "  -w <file>     Output synthesized speech to a .wav file\n\n"
+  "Decoder options:\n"
+  "  -u <num>      Unvoiced speech quality (default=3)\n"
+  "  -xx           Expect non-inverted X2-TDMA signal\n"
+  "  -xr           Expect inverted DMR/MOTOTRBO signal\n\n"
+  "Advanced decoder options:\n"
+  "  -S <num>      Symbol buffer size for QPSK decision point tracking\n"
+  "                 (default=36)\n";
+  write(1, usage_str, strlen(usage_str));
 }
 
 void
@@ -224,12 +230,9 @@ cleanupAndExit (dsd_opts * opts, dsd_state * state)
   if (opts->mbe_out_fd != -1) {
     closeMbeOutFile (opts, state);
   }
-  closeWavOutFile (opts);
+  close(opts->wav_out_fd);
 
-  printf("\n");
-  printf("Total audio errors: %i\n", state->debug_audio_errors);
-  printf("Total header errors: %i\n", state->debug_header_errors);
-  printf("Total irrecoverable header errors: %i\n", state->debug_header_critical_errors);
+  printf("\nTotal audio errors: %u\nTotal header errors: %u\n", state->debug_audio_errors, state->debug_header_errors);
 
 #ifdef TRACE_DSD
   if (state->debug_label_file != NULL) {
@@ -283,9 +286,9 @@ main (int argc, char **argv)
 
 #ifndef NO_REEDSOLOMON
   rs8_init(&state.ReedSolomon_12_09_04, generator_polynomial_dmr, 2);
-  rs6_init(&state.ReedSolomon_24_12_13, generator_polynomial_p25, 6);
-  rs6_init(&state.ReedSolomon_24_16_09, generator_polynomial_p25, 4);
-  rs6_init(&state.ReedSolomon_36_20_17, generator_polynomial_p25, 8);
+  //rs6_init(&state.ReedSolomon_24_12_13, generator_polynomial_p25, 6);
+  //rs6_init(&state.ReedSolomon_24_16_09, generator_polynomial_p25, 4);
+  //rs6_init(&state.ReedSolomon_36_20_17, generator_polynomial_p25, 8);
 #endif
 
   while ((c = getopt (argc, argv, "hep:qv:si:o:d:g:nw:B:C:R:f:u:x:S:")) != -1)
@@ -346,10 +349,12 @@ main (int argc, char **argv)
           break;
         case 'w':
           printf ("Writing audio to file %s\n", optarg);
-          openWavOutFile (&opts, optarg);
+          if ((opts.wav_out_fd = open(optarg, O_WRONLY | O_CREAT | O_APPEND, 0644)) < 0) {
+            printf ("Error - could not open wav output file %s\n", optarg);
+          }
+          write_wav_header(opts.wav_out_fd, 8000);
           break;
         case 'f':
-          printf ("Decoding only DMR/MOTOTRBO frames.\n");
           break;
         case 'u':
           opts.uvquality = strtoul(optarg, NULL, 10);
@@ -382,11 +387,8 @@ main (int argc, char **argv)
         }
     }
 
-  if (opts.wav_out_fd == -1) {
-    openWavOutFile (&opts, "dsd.wav");
-  }
-
   if (openAudioInDevice (&opts, audio_in_dev) < 0) {
+    printf ("Error, couldn't open file %s\n", audio_in_dev);
     return -1;
   } else {
     printf ("Audio In Device: %s\n", audio_in_dev);
@@ -396,8 +398,11 @@ main (int argc, char **argv)
   if (opts.datascope) {
     write(1, "\033[2J", 4);
   }
-
+ 
   while (1) {
+      state.max = 15000;
+      state.min = -15000;
+      state.center = 0;
       noCarrier (&opts, &state);
       state.synctype = getFrameSync (&opts, &state);
       // recalibrate center/umid/lmid
