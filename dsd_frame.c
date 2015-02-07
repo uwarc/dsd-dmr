@@ -88,6 +88,7 @@ get_p25_nac_and_duid(dsd_opts *opts, dsd_state *state)
   bch_code <<= 1;
   bch_code |= (dibit >> 1);      // bit 1
   //parity = (dibit & 1);     // bit 0
+  bch_code <<= 1;
 
   // Check if the NID is correct
   // Ideas taken from http://op25.osmocom.org/trac/wiki.png/browser/op25/gr-op25/lib/decoder_ff_impl.cc
@@ -95,8 +96,8 @@ get_p25_nac_and_duid(dsd_opts *opts, dsd_state *state)
   // See also tia-102-baaa-a-project_25-fdma-common_air_interface.pdf page 40.
   check_result = bchDec(bch_code, &new_nac);
   if (check_result >= 0) {
-      new_duid = (new_nac >> 12);
-      new_nac &= 0x0FFF;
+      new_duid = (new_nac & 0x0F);
+      new_nac >>= 4;
       if (new_nac != nac) {
           // NAC fixed by error correction
           printf("old_nac: 0x%03x -> nac: 0x%03x\n", nac, new_nac);
@@ -118,6 +119,8 @@ get_p25_nac_and_duid(dsd_opts *opts, dsd_state *state)
   } else {
       // Check of NID failed and unable to recover its value
       printf("NID error\n");
+      printf("old_nac: 0x%03x -> nac: 0x%03x\n", nac, (new_nac >> 4));
+      printf("old_duid: 0x%x -> duid: 0x%x\n", duid, (new_nac & 0x0F));
       //state->debug_header_critical_errors++;
   }
   state->nac = nac;
@@ -131,21 +134,16 @@ processFrame (dsd_opts * opts, dsd_state * state)
   int level = (int) state->max / 164;
   unsigned int total_errs = 0, synctype = (state->synctype >> 1);
 
-  state->lasttg = 0;
-  state->last_radio_id = 0;
   state->nac = 0;
   state->duid = 0;
 
   if (synctype == 8) {
-      state->err_str[0] = 0;
       processNXDNData (opts, state);
       return;
   } else if (synctype == 5) {
-      state->err_str[0] = 0;
       processDMRdata (opts, state);
       return;
   } else if (synctype == 1) {
-      state->err_str[0] = 0;
       processX2TDMAData (opts, state);
       return;
   }

@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
     uint64_t encoded_nac_duid = bchEnc(nac_duid_in);
     int nerrs = bchDec(encoded_nac_duid, &nac_duid_test);
     fprintf(stderr, "In: 0x%04x (NAC: 0x%X, DUID: 0x%X) -> 0x%08lx -> 0x%04x\n",
-            nac_duid_in, (nac_duid_in & 0x0FFF), (nac_duid_in >> 12),
+            nac_duid_in, (nac_duid_in >> 4), (nac_duid_in & 0x0F),
             encoded_nac_duid, nac_duid_test);
     fprintf(stderr, "nerrs: %d\n", nerrs); 
     return 0;
