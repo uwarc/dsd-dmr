@@ -380,7 +380,7 @@ processHDU(dsd_opts* opts, dsd_state* state)
   kid |= get_uint(hex_data[16], 6);
   kid <<= 2;
   kid |= ((hex_data[17][0] << 1) | (hex_data[17][1] << 0));
-  state->p25kid = kid;
+  //state->p25kid = kid;
 
   skipDibit (opts, state, 6);
   //status = getDibit (opts, state);
@@ -396,7 +396,6 @@ processHDU(dsd_opts* opts, dsd_state* state)
   }
 
   state->talkgroup = talkgroup;
-  state->lasttg = talkgroup;
   if (opts->p25enc == 1) {
     printf ("mfid: %u talkgroup: %u algid: 0x%02x kid: 0x%04x\n", mfid, talkgroup, algid, kid);
   } else {
@@ -559,7 +558,7 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   mfid  = ((hex_data[0] >> 8) & 0xFF);
   if (opts->errorbars == 1) {
       printf ("LDU1: e: %u, talkgroup: %u, src: %u, mfid: %u, lcformat: 0x%02x, lcinfo: 0x%02x 0x%06x 0x%06x\n",
-              state->errs2, state->lasttg, state->last_radio_id, mfid, lcformat,
+              state->errs2, state->talkgroup, state->radio_id, mfid, lcformat,
               (hex_data[0] >> 16), hex_data[1], hex_data[2]);
   }
 }
@@ -666,7 +665,7 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
 
   if (opts->errorbars == 1) {
     printf ("LDU2: e: %u, talkgroup: %u, src: %u, mi: 0x%04x 0x%04x 0x%04x\n",
-            state->errs2, state->lasttg, state->last_radio_id, hex_data[0], hex_data[1], hex_data[2]);
+            state->errs2, state->talkgroup, state->radio_id, hex_data[0], hex_data[1], hex_data[2]);
   }
 }
 
@@ -805,6 +804,7 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state)
 
   if ((duid == 5) || ((duid == 10) && (state->lastp25type == 1)) || (duid == 12)) {
       if ((opts->mbe_out_dir[0] != 0) && (opts->mbe_out_fd == -1)) {
+          state->errs2 = 0;
           openMbeOutFile (opts, state);
       }
   }
@@ -831,12 +831,11 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state)
   } else if ((duid == 3) || (duid == 15)) {
       if (opts->mbe_out_dir[0] != 0) {
           closeMbeOutFile (opts, state);
+          state->errs2 = 0;
       }
       mbe_initMbeParms (&state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced);
-      state->lasttg = 0;
-      state->last_radio_id = 0;
+      state->talkgroup = 0;
       state->lastp25type = 0;
-      state->err_str[0] = 0;
       if (duid == 3) {
         // Terminator without subsequent Link Control
         processTDU (opts, state);
@@ -846,8 +845,7 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state)
         processTDULC (opts, state);
       }
   } else if (duid == 7) { // 13 -> 0111 = 7
-      state->lasttg = 0;
-      state->last_radio_id = 0;
+      state->talkgroup = 0;
       state->lastp25type = 3;
       // Now processing NID
       skipDibit (opts, state, 328-25);

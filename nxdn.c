@@ -19,6 +19,7 @@ processNXDNData (dsd_opts * opts, dsd_state * state)
   }
 
   closeMbeOutFile (opts, state);
+  state->errs2 = 0;
 
   if (opts->errorbars) {
       int level = (int) state->max / 164;
