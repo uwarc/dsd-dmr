@@ -47,6 +47,19 @@
  */
 int exitflag;
 
+typedef struct _WAVHeader {
+    uint32_t pad0;
+    uint32_t pad1; 
+    uint32_t hdr_len;
+    uint16_t wav_id;
+    uint16_t channels;
+    uint32_t samplerate;
+    uint32_t bitrate;
+    uint32_t block_align;
+    uint32_t data_elem;
+    uint32_t data_len;
+} __attribute__((packed)) WAVHeader;
+
 typedef struct
 {
   int errorbars;
@@ -56,7 +69,8 @@ typedef struct
   unsigned int p25enc;
   unsigned int datascope;
   int audio_in_fd;
-  int audio_in_type; // 0 for device, 1 for file, 2 for portaudio
+  unsigned char audio_in_type; // 0 for device, 1 for file, 2 for portaudio
+  unsigned char audio_in_format; // 0 -> s16, 1 -> float, 2 -> flac, 3 -> u8 i/q pairs at device samplerate, 4 -> same as 3, but also needing a Hilbert transform before lpf/quadrature demod steps.
   time_t mbe_out_last_timeval;
   char mbe_out_dir[1024];
   char mbe_out_path[1024];
@@ -89,6 +103,7 @@ typedef struct
   short inbuffer[4608];
   float inbuffer2[4608];
   unsigned int inbuf_pos;
+
   unsigned int inbuf_size;
   float audio_out_temp_buf[160];
   float *audio_out_temp_buf_p;
@@ -104,22 +119,15 @@ typedef struct
   int maxbuf[1024];
   int minbuf[1024];
   int midx;
-  char err_str[64];
   char ftype[16];
   unsigned int symbolcnt;
-  int rf_mod;
-  int lastp25type;
+  unsigned char rf_mod;
+  unsigned char lastp25type;
   int offset;
-  unsigned char carrier;
   unsigned int talkgroup;
-  unsigned int lasttg;
   unsigned int radio_id;
-  unsigned int last_radio_id;
   unsigned short nac;
   unsigned char duid;
-  unsigned short p25algid;
-  unsigned short p25keyid;
-  unsigned int p25kid;
   unsigned int numtdulc;
   int errs2;
   unsigned char firstframe;
@@ -149,16 +157,6 @@ typedef struct
   ReedSolomon ReedSolomon_24_12_13;
   ReedSolomon ReedSolomon_24_16_09;
   ReedSolomon ReedSolomon_36_20_17;
-
-#ifdef TRACE_DSD
-  char debug_prefix;
-  char debug_prefix_2;
-  unsigned int debug_sample_index;
-  unsigned int debug_sample_left_edge;
-  unsigned int debug_sample_right_edge;
-  FILE* debug_label_file;
-  FILE* debug_label_dibit_file;
-#endif
 } dsd_state;
 
 /*
@@ -262,6 +260,7 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state);
 float get_p25_ber_estimate (dsd_state* state);
 float dmr_filter(dsd_state *state, float sample);
 float nxdn_filter(dsd_state *state, float sample);
+unsigned int dsd_div32(unsigned int num, unsigned int den, unsigned int *rem);
 
 void ReedSolomon_36_20_17_encode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* out_hex_parity);
 int ReedSolomon_36_20_17_decode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* hex_parity);

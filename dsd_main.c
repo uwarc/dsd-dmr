@@ -53,6 +53,41 @@ size_t dsd_strlcpy(char *dst, const char *src, size_t siz)
 	return(s - src - 1);	/* count does not include NUL */
 }
 
+uint32_t dsd_div32(uint32_t num, uint32_t den, uint32_t *rem)
+{
+    uint32_t bit = 1;
+    uint32_t quo;
+
+    if (den > num) {
+        if (rem) {
+            *rem = num;
+        }
+        return 0;
+    }
+
+    /* normalize to make den >= num, but not overflow */
+    while ((den < num) && !(den >> 31)) {
+        bit <<= 1;
+        den <<= 1;
+    }
+    quo = 0;
+
+    /* generate quotient, one bit at a time */
+    while (bit) {
+        if (den <= num) {
+            num -= den;
+            quo += bit;
+        }
+        bit >>= 1;
+        den >>= 1;
+    }
+
+    if (rem) {
+        *rem = num;
+    }
+    return quo;
+}
+
 void
 noCarrier (dsd_opts * opts, dsd_state * state)
 {
@@ -63,20 +98,15 @@ noCarrier (dsd_opts * opts, dsd_state * state)
     state->dibit_buf[i] = 0;
   }
   state->lastsynctype = -1;
-  state->carrier = 0;
-  state->err_str[0] = 0;
   strcpy (state->ftype, "       ");
   state->errs2 = 0;
-  state->lasttg = 0;
-  state->last_radio_id = 0;
+  state->talkgroup = 0;
+  state->radio_id = 0;
   state->lastp25type = 0;
-  state->nac = 0;
-  state->duid = 0;
   state->numtdulc = 0;
   strcpy (state->slot0light, " slot0 ");
   strcpy (state->slot1light, " slot1 ");
   state->firstframe = 0;
-  mbe_initMbeParms (&state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced);
 }
 
 static inline void initOpts (dsd_opts * opts)
@@ -88,6 +118,7 @@ static inline void initOpts (dsd_opts * opts)
   opts->p25status = 0;
   opts->p25tg = 0;
   opts->audio_in_fd = -1;
+  opts->audio_in_format = 0;
   opts->mbe_out_dir[0] = 0;
   opts->mbe_out_path[0] = 0;
   opts->mbe_out_fd = -1;
@@ -97,7 +128,7 @@ static inline void initOpts (dsd_opts * opts)
   //opts->mod_qpsk = 0;
   opts->inverted_dmr = 0;       // most transmitter + scanner + sound card combinations show non-inverted signals for this
   opts->inverted_x2tdma = 1;    // most transmitter + scanner + sound card combinations show inverted signals for this
-  opts->msize = 15;
+  opts->msize = 16;
 }
 
 static void initState (dsd_state * state)
@@ -107,8 +138,8 @@ static void initState (dsd_state * state)
   state->dibit_buf_p = state->dibit_buf + 128;
   state->audio_out_temp_buf_p = state->audio_out_temp_buf;
   //state->wav_out_bytes = 0;
-  state->inbuf_size = 4096;
-  state->inbuf_pos = 4096;
+  state->inbuf_size = 1024;
+  state->inbuf_pos = 1024;
   state->samplesPerSymbol = 10;
   state->synctype = -1;
   state->lastsynctype = -1;
@@ -135,14 +166,11 @@ static void initState (dsd_state * state)
       state->minbuf[i] = -15000;
   }
   state->midx = 0;
-  state->err_str[0] = 0;
   strcpy (state->ftype, "          ");
   state->symbolcnt = 0;
   state->rf_mod = 2;
   state->offset = 0;
-  state->carrier = 0;
   state->talkgroup = 0;
-  state->lasttg = 0;
   state->radio_id = 0;
   state->numtdulc = 0;
   state->errs2 = 0;
@@ -168,34 +196,25 @@ static void initState (dsd_state * state)
 #endif
 }
 
-static const unsigned char static_hdr_portion[20] = {
-   0x52, 0x49, 0x46, 0x46, 0xFF, 0xFF, 0xFF, 0x7F,
-   0x57, 0x41, 0x56, 0x45, 0x66, 0x6D, 0x74, 0x20,
-   0x10, 0x00, 0x00, 0x00
+static const unsigned char static_hdr_portion[8] = {
+   0x52, 0x49, 0x46, 0x46, 0xFF, 0xFF, 0xFF, 0x7F
 };
-
-typedef struct _WAVHeader {
-    uint16_t wav_id;
-    uint16_t channels;
-    uint32_t samplerate;
-    uint32_t bitrate;
-    uint32_t block_align;
-    uint32_t pad0;
-    uint32_t pad1;
-} __attribute__((packed)) WAVHeader;
 
 static void write_wav_header(int fd, uint32_t rate)
 {
    WAVHeader w;
-   write(fd, &static_hdr_portion, 20);
+   write(fd, &static_hdr_portion, 8);
 
+   w.pad0 = 0x45564157;
+   w.pad1 = 0x20746D66;
+   w.hdr_len = 0x10;
    w.wav_id = 1;
    w.channels = 1;
    w.samplerate = rate;
    w.bitrate = rate*2;
    w.block_align = 0x00100010;
-   w.pad0 = 0x61746164;
-   w.pad1 = 0x7fffffff;
+   w.data_elem = 0x61746164;
+   w.data_len = 0x7fffffff;
    write(fd, &w, sizeof(WAVHeader));
 }
 
@@ -245,6 +264,7 @@ cleanupAndExit (dsd_opts * opts, dsd_state * state)
   }
 #endif
 
+  close(opts->audio_in_fd);
   printf ("Exiting.\n");
   exit (0);
 }
@@ -291,7 +311,7 @@ main (int argc, char **argv)
   //rs6_init(&state.ReedSolomon_36_20_17, generator_polynomial_p25, 8);
 #endif
 
-  while ((c = getopt (argc, argv, "hep:qv:si:o:d:g:nw:B:C:R:f:u:x:S:")) != -1)
+  while ((c = getopt (argc, argv, "hep:qv:si:t:d:g:nw:B:C:R:f:u:x:S:A:M:")) != -1)
     {
       opterr = 0;
       switch (c)
@@ -324,6 +344,14 @@ main (int argc, char **argv)
           break;
         case 'i':
           audio_in_dev = optarg;
+          break;
+        case 't':
+          opts.audio_in_format = strtoul(optarg, NULL, 10);
+          if (opts.audio_in_format > 4) {
+            printf("Error: invalid choice %u for audio input format! (Must be 0-4)\n",
+                   opts.audio_in_format);
+            return -1;
+          }
           break;
         case 'd':
           dsd_strlcpy(opts.mbe_out_dir, optarg, 1023);
@@ -372,6 +400,15 @@ main (int argc, char **argv)
               printf ("Expecting inverted DMR/MOTOTRBO signals.\n");
           }
           break;
+        case 'M':
+          opts.msize = strtoul(optarg, NULL, 10);
+          if (opts.msize > 1024) {
+            opts.msize = 1024;
+          } else if (opts.msize < 1) {
+            opts.msize = 1;
+          }
+          printf ("Setting QPSK Min/Max buffer to %i\n", opts.msize);
+          break;
         case 'S':
           state.ssize = strtoul(optarg, NULL, 10);
           if (state.ssize > 128) {
@@ -393,31 +430,19 @@ main (int argc, char **argv)
   } else {
     printf ("Audio In Device: %s\n", audio_in_dev);
   }
-  //opts.audio_in_type |= 0x04;
 
   if (opts.datascope) {
     write(1, "\033[2J", 4);
   }
  
   while (1) {
-      state.max = 15000;
-      state.min = -15000;
-      state.center = 0;
       noCarrier (&opts, &state);
       state.synctype = getFrameSync (&opts, &state);
-      // recalibrate center/umid/lmid
-      state.center = ((state.max) + (state.min)) / 2;
-      state.umid = (((state.max) - state.center) * 5 / 8) + state.center;
-      state.lmid = (((state.min) - state.center) * 5 / 8) + state.center;
       while (state.synctype != -1) {
           if (!opts.datascope) {
               processFrame (&opts, &state);
           }
           state.synctype = getFrameSync (&opts, &state);
-          // recalibrate center/umid/lmid
-          state.center = ((state.max) + (state.min)) / 2;
-          state.umid = (((state.max) - state.center) * 5 / 8) + state.center;
-          state.lmid = (((state.min) - state.center) * 5 / 8) + state.center;
       }
   }
 
