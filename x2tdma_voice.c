@@ -62,6 +62,8 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
   char sync[25];
   unsigned char syncdata[24];
   unsigned char mfid = 0, lcformat = 0;
+  unsigned short p25algid = 0;
+  unsigned short p25keyid = 0;
   char lcinfo[57];
   char parity;
   unsigned char cachbits[25];
@@ -238,32 +240,22 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
         {
           burstd = (1 & syncdata[1]);   // bit 0
 
-          state->p25algid = ((syncdata[4] << 2)  | (syncdata[5] << 0));  
+          p25algid = ((syncdata[4] << 2)  | (syncdata[5] << 0));
           if (burstd == 0) {
-              state->p25algid <<= 4;
-              state->p25algid = ((syncdata[8] << 2)  | (syncdata[9] << 0));  
+              unsigned int aidx;
+              p25algid <<= 4;
+              p25algid = ((syncdata[8] << 2)  | (syncdata[9] << 0));
 
-              state->p25keyid = syncdata[10];
-              state->p25keyid <<= 2;
-              state->p25keyid = syncdata[11];
-              state->p25keyid <<= 2;
-              state->p25keyid = syncdata[12];
-              state->p25keyid <<= 2;
-              state->p25keyid = syncdata[13];
-              state->p25keyid <<= 2;
-              state->p25keyid = syncdata[14];
-              state->p25keyid <<= 2;
-              state->p25keyid = syncdata[15];
-              state->p25keyid <<= 2;
-              state->p25keyid = syncdata[16];
-              state->p25keyid <<= 2;
-              state->p25keyid = syncdata[17];
-              state->p25keyid <<= 2;
+              p25keyid = 0;
+              for (aidx = 0; aidx < 8; aidx++) {
+                p25keyid <<= 2;
+                p25keyid |= syncdata[aidx+10];
+              }
             }
           else
             {
-              state->p25algid = 0;
-              state->p25keyid = 0;
+              p25algid = 0;
+              p25keyid = 0;
             }
         }
       else if (j == 4)
@@ -377,7 +369,7 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
         printf ("mfid: %u, lcformat: 0x%02x, lcinfo: %s\n", mfid, lcformat, lcinfo);
     }
     if (opts->p25enc == 1) {
-        printf ("algid: 0x%04x kid: 0x%04x\n", state->p25algid, state->p25keyid);
+        printf ("algid: 0x%04x kid: 0x%04x\n", p25algid, p25keyid);
     }
 }
 
