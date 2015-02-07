@@ -24,10 +24,17 @@ openAudioInDevice (dsd_opts *opts, const char *audio_in_dev)
       opts->audio_in_type = 0;
       opts->audio_in_fd = STDIN_FILENO;
 	} else {
+      struct stat st;
       opts->audio_in_type = 1;
       opts->audio_in_fd = open(audio_in_dev, O_RDONLY);
       if(opts->audio_in_fd < 0) {
           return -1;
+      }
+      if (stat(audio_in_dev, &st) < 0) {
+        return -2;
+      }
+      if (S_ISFIFO(st.st_mode)) {
+        opts->audio_in_type = 0;
       }
   }
 
