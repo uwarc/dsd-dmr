@@ -31,7 +31,7 @@ int bchDec(uint64_t cw, uint16_t *cw_decoded)
 
   for (i = 0; i < 63; i++) {
       //Codeword[i] = ((cw >> (62-i)) & 1);
-      Codeword[i] = ((cw >> (i)) & 1);
+      Codeword[i] = ((cw >> (i+1)) & 1);
   }
 
   for(i = 1; i <= 22; i++) {
@@ -163,7 +163,7 @@ int bchDec(uint64_t cw, uint16_t *cw_decoded)
 
   for (i = 0; i < 16; i++) {
     cw_out <<= 1;
-    cw_out |= Codeword[63-i];
+    cw_out |= Codeword[62-i];
   }
   *cw_decoded = cw_out;
   return CantDecode;
