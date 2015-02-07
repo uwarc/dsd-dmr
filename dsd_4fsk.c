@@ -3,8 +3,87 @@
 #include <stdio.h>
 #include "dsd.h"
 #include "fsk4_interp_coeffs.h"
+#include "fsk4_rrc_filter_coeffs.h"
 #define FSK4_MAX(a,b) ((a) > (b) ? (a) : (b))
 #define FSK4_MIN(a,b) ((a) > (b) ? (b) : (a))
+
+#if defined(__amd64__) || defined(__x86_64__) || defined(__i386__) && defined(__SSE__)
+static float scalarproduct_float_sse(float *v1, float *v2, unsigned int len) {
+        float sum = 0.0f;
+        unsigned int i;
+
+        for(i=0; i<len; i+=4) {
+            __asm__ volatile(
+                 "movups  (%1), %%xmm2 \n\t"
+                 "movaps  (%2), %%xmm3 \n\t"
+                 "mulps %%xmm3, %%xmm2 \n\t"
+                 "addps %%xmm2, %0 \n\t"
+                :"=x"(sum) :"r"(&v1[i]), "r"(&v2[i]));
+        }
+        __asm__ volatile(
+                 "movaps      %0, %%xmm5 \n\t"
+                 "shufps   $0x1b, %0, %%xmm5 \n\t"
+                 "addps       %0, %%xmm5 \n\t"
+                 "movhlps %%xmm5, %0     \n\t"
+                 "addps   %%xmm5, %0     \n\t"
+                :"+x"(sum));
+        return sum;
+}
+#define scalarproduct_float scalarproduct_float_sse
+#elif defined(__ARM_NEON__)
+static float scalarproduct_float_neon(float *a, float *b, unsigned int len)
+{
+    float ret = 0.0f;
+    uint32_t remainder = (len & 15);
+    len -= remainder;
+
+    __asm__ __volatile("  vmov.f32 q1, #0.0\n"
+                       "  cmp %[len], #0\n"
+                       "  bne 1f\n"
+                       "  b 2f\n"
+                       "1:"
+                       "  vld1.32 {q8, q9}, [%[b]]!\n"
+                       "  vld1.32 {q12, q13}, [%[a]]!\n"
+                       "  vld1.32 {q10, q11}, [%[b]]!\n"
+                       "  vld1.32 {q14, q15}, [%[a]]!\n"
+                       "  vmla.f32 q1, q8, q12\n"
+                       "  vmla.f32 q1, q9, q13\n"
+                       "  vmla.f32 q1, q10, q14\n"
+                       "  vmla.f32 q1, q11, q15\n"
+                       "  subs %[len], %[len], #16\n"
+                       "  bne 1b\n"
+                       "  cmp %[remainder], #0\n"
+                       "  beq 3f\n"
+                       "2:"
+                       "  vld1.32 {q2}, [%[b]]!\n"
+                       "  vld1.32 {q3}, [%[a]]!\n"
+                       "  vmla.f32 q1, q2, q3\n"
+                       "  subs %[remainder], %[remainder], #4\n"
+                       "  bne 2b\n"
+                       "2:"
+                       "  vadd.f32 d2, d2, d3\n"
+                       "  vpadd.f32 d2, d2, d2\n"
+                       "  vmov.f32 %[ret], d2[0]\n"
+                       : [ret] "=&r" (ret), [a] "+r" (a), [b] "+r" (b),
+                         [len] "+l" (len), [remainder] "+l" (remainder)
+                       :
+                       : "cc", "q1", "q2", "q3", "q8", "q9", "q10", "q11",
+                               "q12", "q13", "q14", "q15");
+    return ret;
+}
+#define scalarproduct_float scalarproduct_float_neon
+#else
+static float scalarproduct_float_c(float *v1, float *v2, unsigned int len)
+{
+    float p = 0.0f;
+    unsigned int i;
+    for (i = 0; i < len; i++) {
+        p += v1[i] * v2[i];
+    }
+    return p;
+}
+#define scalarproduct_float scalarproduct_float_c
+#endif
 
 // internal fast loop (must be this high to acquire symbol sync)
 #define K_FINE_FREQUENCY 0.125f
@@ -32,28 +111,11 @@ unsigned int fsk4_tracking_loop_mmse(dsd_state *state, float input, float *outpu
   if(state->d_symbol_clock > 1.0f) {
     state->d_symbol_clock -= 1.0f;
 	
-	// at this point we state that linear interpolation was tried
-	// but found to be slightly inferior.  Using MMSE
-	// interpolation shouldn't be a terrible burden
-	
-#if 0
-	int imu = FSK4_MIN(lrintf((FSK4_NSTEPS * (state->d_symbol_clock / state->d_symbol_time))), FSK4_NSTEPS - 1);
-#else
 	int imu = lrintf(FSK4_NSTEPS * ((state->d_symbol_clock / state->d_symbol_time)));
 	if (imu >= FSK4_NSTEPS) { 
 	  imu = FSK4_NSTEPS - 1;
 	}
-#endif
 	
-#if 0
-	float interp = 0.0;
-	float interp_p1 = 0.0;
-	for(i = 0, j = state->d_history_last; i < FSK4_NTAPS; ++i) {
-	  interp += TAPS[imu][i] * state->d_history[j];
-	  interp_p1 += TAPS[imu+1][i] * state->d_history[j];
-	  j = (j + 1) % FSK4_NTAPS;
-	}
-#else
 	unsigned int j = state->d_history_last;
 	float interp = 0.0;
 	float interp_p1 = 0.0;
@@ -62,7 +124,6 @@ unsigned int fsk4_tracking_loop_mmse(dsd_state *state, float input, float *outpu
 	    interp_p1 +=  TAPS[imu+1][i] * state->d_history[j];
 	    j = (j+1) % FSK4_NTAPS;
     }
-#endif
 	
 	// our output symbol will be interpolated value corrected for
 	// symbol_spread and frequency offset
@@ -114,29 +175,94 @@ unsigned int fsk4_tracking_loop_mmse(dsd_state *state, float input, float *outpu
   return 0;
 }
 
+static float 
+readFromBuffer_s16(int in_fd, dsd_state *state, ssize_t *result)
+{
+    float ret = 0.0f;
+    if (state->inbuf_pos < state->inbuf_size) {
+        *result = 1;
+        ret = (float)state->inbuffer[state->inbuf_pos++];
+    } else {
+        state->inbuf_pos = 1;
+        *result = read(in_fd, state->inbuffer, 1024 * sizeof(short));
+        state->inbuf_size = (*result / sizeof(short));
+        ret = (float)state->inbuffer[0];
+    }
+    ret *= (1.0f / 32768.0f);
+    return ret;
+}
+
+static float
+readFromBuffer_f32(int in_fd, dsd_state *state, ssize_t *result)
+{
+    float ret = 0.0f;
+    if (state->inbuf_pos < state->inbuf_size) {
+        *result = 1;
+        ret = state->inbuffer2[state->inbuf_pos++];
+    } else {
+        state->inbuf_pos = 1;
+        *result = read(in_fd, state->inbuffer2, 1024 * sizeof(float));
+        state->inbuf_size = (*result / sizeof(float));
+        ret = state->inbuffer2[0];
+    }
+    if (ret != ret) ret = 0.0f;
+    return ret;
+}
+
+float ngain = 0.101333437f;
+float nxgain = 0.062659371644565f;
+
+float
+dmr_filter(dsd_state *state, float sample)
+{
+  float sum = 0.0f;
+  unsigned int i;
+
+  for (i = 0; i < RRC_NZEROS; i++)
+    state->xv[i] = state->xv[i+1];
+
+  state->xv[RRC_NZEROS] = sample; // unfiltered sample in
+  sum = scalarproduct_float(state->xv, xcoeffs, 84);
+  return (sum * ngain); // filtered sample out
+}
+
+float
+nxdn_filter(dsd_state *state, float sample)
+{
+  float sum = 0.0f;
+  unsigned int i;
+
+  for (i = 0; i < RRC_NXZEROS; i++)
+    state->xv[i] = state->xv[i+1];
+
+  state->xv[RRC_NXZEROS] = sample; // unfiltered sample in
+  sum = scalarproduct_float(state->xv, nxcoeffs, 136);
+  return (sum * nxgain); // filtered sample out
+}
+
 int
 getSymbol (dsd_opts *opts, dsd_state *state, int have_sync)
 {
     unsigned int i;
+    float sample_scale =  (((state->lastsynctype & ~1) != 0) ? 0.0015432f : 0.0016666f);
     float sample_out = 0.0f;
     ssize_t result = 0;
 
     // first we run through all provided data
-    //for(i = 0; i < 10; i++) {
-    for(i = 0; i < 4800; i++) {
+    //for(i = 0; i < 48000; i++) {
+    while (1) {
         float sample = 0.0f;
-        short tmp;
 
         // Read the new sample from the input
-        if((opts->audio_in_type == 0) || (opts->audio_in_type == 1)) {
-            result = read (opts->audio_in_fd, &tmp, 2);
-            sample = (tmp / 16384.0f);
-        } else if ((opts->audio_in_type == 4) || (opts->audio_in_type == 5)) {
-            result = read (opts->audio_in_fd, &sample, 4);
-            sample *= 2.0f;
+        if(opts->audio_in_format == 0) {
+            //result = read (opts->audio_in_fd, &tmp, 2);
+            sample = readFromBuffer_s16(opts->audio_in_fd, state, &result);
+        } else if (opts->audio_in_format == 1) {
+            //result = read (opts->audio_in_fd, &sample, 4);
+            sample = readFromBuffer_f32(opts->audio_in_fd, state, &result);
         }
-        sample *= (12000.0f / 648.0f);
-  
+        sample *= (24000.0f * sample_scale);
+
         if(result <= 0) {
           cleanupAndExit (opts, state);
         }
