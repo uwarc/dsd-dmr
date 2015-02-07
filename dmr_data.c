@@ -78,6 +78,37 @@ static char *headertypes[16] = {
     "Hdr8", "Hdr9", "Hdr10", "Hdr11", "Hdr12", "DSDa", "RSDa", "Prop"
 };
 
+static char *csbk_ids[] = {
+    "Aloha", // 25
+    "UDT Download Header", // 26
+    "UDT Upload Header", // 27
+    "Ahoy", // 28
+    "???", // 29
+    "Ackvitation", // 30
+    "Random Access Service Request", // 31
+    "Ack Outbound TSCC", // 32
+    "Ack Inbound TSCC", // 33
+    "Ack Outbound Payload", // 34
+    "Ack Inbound Payload", // 35
+    "???", // 36
+    "???", // 37
+    "Nack Response", // 38
+    "???", // 39
+    "C Bcast", // 40
+    "???", // 41
+    "Maintenance", // 42
+    "???", // 43
+    "???", // 44
+    "???", // 45
+    "Clear", // 46
+    "Protect", // 47
+    "Private Voice Grant", // 48
+    "Talkgroup Voice Grant", // 49
+    "Private Broadcast Voice Grant", // 50
+    "Private Data Grant", // 51
+    "Talkgroup Data Grant" // 52
+};
+
 static unsigned char cach_deinterleave[24] = {
      0,  7,  8,  9,  1, 10, 11, 12,
      2, 13, 14, 15,  3, 16,  4, 17,
@@ -171,7 +202,7 @@ static void process_dataheader(unsigned char payload[96])
 
 static unsigned int processFlco(dsd_state *state, unsigned char payload[97], char flcostr[1024])
 {
-  unsigned int l = 0, i, k = 0, radio_id = 0;
+  unsigned int l = 0, i, k = 0, lasttg = 0, radio_id = 0;
   unsigned char flco = get_uint(payload+2, 6);
 
   if (flco == 0) {
@@ -189,10 +220,10 @@ static unsigned int processFlco(dsd_state *state, unsigned char payload[97], cha
     state->radio_id = get_uint(payload+56, 24);
     k = snprintf(flcostr, 1023, "Msg: Capacity+ Group Voice, Talkgroup: %u, RestCh: %u, RadioId: %u", state->talkgroup, l, state->radio_id);
   } else if (flco == 48) {
-    state->lasttg = get_uint(payload+16, 24);
+    lasttg = get_uint(payload+16, 24);
     radio_id = get_uint(payload+40, 24);
     l = ((payload[69] << 2) | (payload[70] << 1) | (payload[71] << 0));
-    k = snprintf(flcostr, 1023, "Msg: Terminator Data LC, Talkgroup: %u, RadioId: %u, N(s): %u", state->lasttg, radio_id, l);
+    k = snprintf(flcostr, 1023, "Msg: Terminator Data LC, Talkgroup: %u, RadioId: %u, N(s): %u", lasttg, radio_id, l);
   } else { 
     k = snprintf(flcostr, 1023, "Unknown Standard/Capacity+ FLCO: flco: 0x%x, packet_dump: ", flco);
     for (i = 2; i < 12; i++) {
@@ -413,10 +444,12 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   golay_codeword |= *dibit_p++;
 
   // signaling data or sync
-  if (state->currentslot == 0) {
-      strcpy (state->slot0light, "[slot0]");
-  } else {
-      strcpy (state->slot1light, "[slot1]");
+  if ((state->lastsynctype & ~1) == 12) {
+      if (state->currentslot == 0) {
+          strcpy (state->slot0light, "[slot0]");
+      } else {
+          strcpy (state->slot1light, "[slot1]");
+      }
   }
 
   // repeat of slottype
@@ -434,12 +467,13 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   Golay23_Correct(&golay_codeword);
   bursttype = (golay_codeword & 0x0f);
 
-  if (bursttype == 8) {
+  if (bursttype == 9) {
     print_burst = 0;
   }
 
   if ((bursttype == 1) || (bursttype == 2)) {
     closeMbeOutFile (opts, state);
+    state->errs2 = 0;
   }
 
   // 2nd half next slot
