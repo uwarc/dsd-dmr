@@ -77,6 +77,7 @@ typedef struct
   int mbe_out_fd;
   unsigned int serial_baud;
   int serial_fd;
+  unsigned char agc_enable;
   float audio_gain;
   unsigned int wav_out_samplerate;
   int wav_out_fd;

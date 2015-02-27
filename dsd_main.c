@@ -122,6 +122,7 @@ static inline void initOpts (dsd_opts * opts)
   opts->mbe_out_dir[0] = 0;
   opts->mbe_out_path[0] = 0;
   opts->mbe_out_fd = -1;
+  opts->agc_enable = 1;
   opts->audio_gain = 0;
   opts->wav_out_fd = -1;
   opts->uvquality = 3;
@@ -359,21 +360,12 @@ main (int argc, char **argv)
           printf ("Writing mbe data files to directory %s\n", opts.mbe_out_dir);
           break;
         case 'g':
-          opts.audio_gain = strtod(optarg, NULL);
-          if (opts.audio_gain < (float) 0 )
-            {
+          opts.agc_enable = strtoul(optarg, NULL, 10);
+          if (!opts.agc_enable) {
               printf ("Disabling audio out gain setting\n");
-            }
-          else if (opts.audio_gain == (float) 0)
-            {
-              opts.audio_gain = (float) 0;
+          } else {
               printf ("Enabling audio out auto-gain\n");
-            }
-          else
-            {
-              printf ("Setting audio out gain to %f\n", opts.audio_gain);
-              state.aout_gain = opts.audio_gain;
-            }
+          } 
           break;
         case 'w':
           printf ("Writing audio to file %s\n", optarg);

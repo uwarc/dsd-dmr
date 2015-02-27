@@ -148,6 +148,18 @@ static int mbe_eccImbe7200x4400Data (char imbe_fr[8][23], char *imbe_d)
   return (errs);
 }
 
+unsigned int demodImbe7200x4400 (char imbe_fr[8][23], char imbe_d[88])
+{
+    unsigned int i, errs2 = 0;
+    for (i = 0; i < 88; i++) {
+        imbe_d[i] = 0;
+    }
+    //errs2 = mbe_eccImbe7200x4400C0 (imbe_fr[0]);
+    mbe_demodulateImbe7200x4400Data (imbe_fr);
+    errs2 += mbe_eccImbe7200x4400Data (imbe_fr, imbe_d);
+    return errs2;
+}
+
 void
 process_IMBE (dsd_opts* opts, dsd_state* state, int* status_count)
 {
@@ -188,28 +200,27 @@ process_IMBE (dsd_opts* opts, dsd_state* state, int* status_count)
       {
           // Check for a non-standard c0 transmitted
           // This is explained here: https://github.com/szechyjs/dsd/issues/24
-          char non_standard_word[23] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0};
-          int match = 1;
-          unsigned int i;
-          for (i=0; i<23; i++) {
-              if (imbe_fr[0][i] != non_standard_word[i]) {
-                  match = 0;
-                  break;
-              }
+
+          //unsigned char non_standard_word[23] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0};
+          unsigned int nsw = 0x00038000;
+          unsigned int gin = 0, gout;
+          int j;
+          for (j = 22; j >= 0; j--) {
+            gin <<= 1;
+            gin |= imbe_fr[0][j];
           }
 
-          if (match) {
+          if (gin == nsw) {
               // Skip this particular value. If we let it pass it will be signaled as an erroneus IMBE
               printf("(Non-standard IMBE c0 detected, skipped)\n");
           } else {
               char imbe_d[88];
-              for (i = 0; i < 88; i++) {
-                imbe_d[i] = 0;
+              state->errs2 = mbe_golay2312 (gin, &gout);
+              for (j = 11; j >= 0; j--) {
+                imbe_fr[0][j+11] = (gout & 0x0800) >> 11;
+                gout <<= 1;
               }
-
-              state->errs2 = mbe_eccImbe7200x4400C0 (imbe_fr[0]);
-              mbe_demodulateImbe7200x4400Data (imbe_fr);
-              state->errs2 += mbe_eccImbe7200x4400Data (imbe_fr, imbe_d);
+              state->errs2 += demodImbe7200x4400 (imbe_fr, imbe_d);
               processIMBEFrame (opts, state, imbe_d);
           }
       }

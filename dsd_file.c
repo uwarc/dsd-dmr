@@ -69,7 +69,7 @@ processAudio (dsd_opts * opts, dsd_state * state)
   int i, n;
   float aout_abs, max, gainfactor, gaindelta, maxbuf;
 
-  if (opts->audio_gain == 0.0f) {
+  if (opts->agc_enable) {
       // detect max level
       max = 0;
       for (n = 0; n < 160; n++) {
@@ -107,19 +107,14 @@ processAudio (dsd_opts * opts, dsd_state * state)
               gaindelta = (0.05f * state->aout_gain);
           }
       }
-      gaindelta *= 0.00625f;
   } else {
       gaindelta = 0.0f;
   }
 
-  if(opts->audio_gain >= 0) {
-      // adjust output gain
-      state->audio_out_temp_buf_p = state->audio_out_temp_buf;
-      for (n = 0; n < 160; n++) {
-          *state->audio_out_temp_buf_p = (state->aout_gain + ((float) n * gaindelta)) * (*state->audio_out_temp_buf_p);
-          state->audio_out_temp_buf_p++;
-      }
-      state->aout_gain += (160.0f * gaindelta);
+  // adjust output gain
+  state->aout_gain += gaindelta;
+  for (n = 0; n < 160; n++) {
+      state->audio_out_temp_buf[n] *= state->aout_gain;
   }
 }
 
@@ -147,7 +142,7 @@ writeSynthesizedVoice (dsd_opts * opts, dsd_state * state)
 void demodAmbe3600x24x0Data (int *errs2, char ambe_fr[4][24], char *ambe_d)
 {
   int i, j, k;
-  unsigned int block = 0, c0_gout = 0, gout = 0, errs = 0;
+  unsigned int block = 0, gin = 0, errs = 0;
   unsigned short pr[115], foo;
   char *ambe = ambe_d;
 
@@ -156,19 +151,19 @@ void demodAmbe3600x24x0Data (int *errs2, char ambe_fr[4][24], char *ambe_d)
       block |= ambe_fr[0][j+1];
   }
 
+  gin = block;
   Golay23_Correct (&block);
-  c0_gout = block;
 
-  block >>= 11;
-  block ^= c0_gout;
+  gin >>= 11;
+  gin ^= block;
   for (j = 0; j < 12; j++) {
-      if ((block >> j) & 1) {
+      if ((gin >> j) & 1) {
           errs++;
       }
   }
 
   // create pseudo-random modulator
-  foo = c0_gout;
+  foo = block;
   pr[0] = (16 * foo);
   for (i = 1; i < 24; i++) {
       pr[i] = (173 * pr[i - 1]) + 13849 - (65536 * (((173 * pr[i - 1]) + 13849) >> 16));
@@ -179,7 +174,7 @@ void demodAmbe3600x24x0Data (int *errs2, char ambe_fr[4][24], char *ambe_d)
 
   // just copy C0
   for (j = 11; j >= 0; j--) {
-      *ambe++ = ((c0_gout >> j) & 1);
+      *ambe++ = ((block >> j) & 1);
   }
 
   // demodulate C1 with pr
@@ -190,19 +185,19 @@ void demodAmbe3600x24x0Data (int *errs2, char ambe_fr[4][24], char *ambe_d)
       block |= (ambe_fr[1][i] ^ pr[k++]);
   }
 
+  gin = block;
   Golay23_Correct (&block);
-  gout = block;
 
-  block >>= 11;
-  block ^= gout;
+  gin >>= 11;
+  gin ^= block;
   for (j = 0; j < 12; j++) {
-      if ((block >> j) & 1) {
+      if ((gin >> j) & 1) {
           errs++;
       }
   }
 
   for (j = 11; j >= 0; j--) {
-      *ambe++ = ((gout >> j) & 1);
+      *ambe++ = ((block >> j) & 1);
   }
 
   // just copy C2
@@ -223,9 +218,6 @@ processAMBEFrame (dsd_opts * opts, dsd_state * state, char ambe_fr[4][24])
 {
   char ambe_d[49];
 
-  //state->errs2 = mbe_eccAmbe3600x2450C0 (ambe_fr);
-  //mbe_demodulateAmbe3600x2450Data (ambe_fr);
-  //state->errs2 += mbe_eccAmbe3600x2450Data (ambe_fr, ambe_d);
   demodAmbe3600x24x0Data (&state->errs2, ambe_fr, ambe_d);
   if (opts->mbe_out_fd != -1) {
       saveAmbe2450Data (opts, state, ambe_d);
@@ -233,11 +225,13 @@ processAMBEFrame (dsd_opts * opts, dsd_state * state, char ambe_fr[4][24])
   state->debug_audio_errors += state->errs2;
 
   if (opts->wav_out_fd != -1) {
+      char err_str[64];
+      int errs = 0;
       if ((state->synctype == 6) || (state->synctype == 7)) {
-          mbe_processAmbe2400Dataf (state->audio_out_temp_buf, &state->errs2, state->err_str, ambe_d,
+          mbe_processAmbe2400Dataf (state->audio_out_temp_buf, &errs, &state->errs2, err_str, ambe_d,
                                     &state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced, opts->uvquality);
       } else {
-          mbe_processAmbe2450Dataf (state->audio_out_temp_buf, &state->errs2, state->err_str, ambe_d,
+          mbe_processAmbe2450Dataf (state->audio_out_temp_buf, &errs, &state->errs2, err_str, ambe_d,
                                     &state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced, opts->uvquality);
       }
 
@@ -255,7 +249,9 @@ processIMBEFrame (dsd_opts * opts, dsd_state * state, char imbe_d[88])
   state->debug_audio_errors += state->errs2;
 
   if (opts->wav_out_fd != -1) {
-      mbe_processImbe4400Dataf (state->audio_out_temp_buf, &state->errs2, state->err_str, imbe_d,
+      char err_str[64];
+      int errs = 0;
+      mbe_processImbe4400Dataf (state->audio_out_temp_buf, &errs, &state->errs2, err_str, imbe_d,
                                 &state->cur_mp, &state->prev_mp, &state->prev_mp_enhanced, opts->uvquality);
       processAudio (opts, state);
       writeSynthesizedVoice (opts, state);
@@ -289,6 +285,7 @@ openMbeOutFile (dsd_opts * opts, dsd_state * state)
 {
   struct timeval tv;
   unsigned int is_imbe = !(state->synctype & ~1U); // Write IMBE magic if synctype == 0 or 1
+  char magic[4] = { '.', 'a', 'm', 'b' };
 
   gettimeofday (&tv, NULL);
   opts->mbe_out_last_timeval = tv.tv_sec;
@@ -300,10 +297,10 @@ openMbeOutFile (dsd_opts * opts, dsd_state * state)
   }
 
   // write magic
+  // 0x626D612E / 0x626D692E
   if ((state->synctype == 0) || (state->synctype == 1)) {
-      write (opts->mbe_out_fd, ".imb", 4);
-  } else {
-      write (opts->mbe_out_fd, ".amb", 4);
+      magic[1] = 'i';
   }
+  write (opts->mbe_out_fd, magic, 4);
 }
 

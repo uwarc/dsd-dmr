@@ -15,7 +15,6 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <assert.h>
 #include "dsd.h"
 
 static unsigned int 
@@ -98,42 +97,6 @@ getDibit (dsd_opts* opts, dsd_state* state)
   unsigned int dibit;
   int symbol = getSymbol (opts, state, 1);
   state->sbuf[state->sidx] = symbol;
-
-#if 0
-  // continuous update of min/max in rf_mod=1 (QPSK) mode
-  // in c4fm min/max must only be updated during sync
-  if (state->rf_mod == 1) {
-    int sbuf2[128];
-    int i, lmin, lmax, lsum = 0;
-
-    for (i = 0; i < state->ssize; i++) {
-      sbuf2[i] = state->sbuf[i];
-    }
-    Shellsort_int(sbuf2, state->ssize);
-
-    lmin = (sbuf2[0] + sbuf2[1]) / 2;
-    lmax = (sbuf2[(state->ssize - 1)] + sbuf2[(state->ssize - 2)]) / 2;
-    state->minbuf[state->midx] = lmin;
-    state->maxbuf[state->midx] = lmax;
-    if (state->midx == (opts->msize - 1)) {
-          state->midx = 0;
-    } else {
-          state->midx++;
-    }
-    for (i = 0; i < opts->msize; i++) {
-          lsum += state->minbuf[i];
-    }
-    state->min = lsum / opts->msize;
-    lsum = 0;
-    for (i = 0; i < opts->msize; i++) {
-          lsum += state->maxbuf[i];
-    }
-    state->max = lsum / opts->msize;
-    state->center = ((state->max) + (state->min)) / 2;
-    state->umid = (((state->max) - state->center) * 5 / 8) + state->center;
-    state->lmid = (((state->min) - state->center) * 5 / 8) + state->center;
-  }
-#endif
 
   // Increase sidx
   if (state->sidx == (state->ssize - 1)) {
