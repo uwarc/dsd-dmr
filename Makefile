@@ -3,28 +3,26 @@ EXEC = ./dsd
 
 # SETTINGS
 CC = gcc
-CFLAGS += -Wall -Wextra -MMD -fno-omit-frame-pointer
+CFLAGS += -Wall -Wextra -MMD -O2 -fno-math-errno -fno-trapping-math -fno-omit-frame-pointer -fno-asynchronous-unwind-tables -fwrapv 
 LDLIBS = -lmbe -lm
 
-# Removes one of the dsd_symbol methods
-# Use dsd_symbol.c for pipes
-# Use dsd_symbol2.c for reading from file
-DSDSYMBOL_REMOVE = dsd_symbol2.c
-
 # FILES
-CCFILES = $(wildcard *.c)
-CCOBJECTS = $(subst ${DSDSYMBOL_REMOVE:.c=.o},,${CCFILES:.c=.o})
+CCFILES = bch.c dsd_4fsk.c dsd_datascope.c dsd_dibit.c dsd_file.c dsd_frame.c dsd_frame_sync.c dsd_main.c dmr_data.c dmr_voice.c dstar.c nxdn.c p25p1.c Golay.c
+CCOBJECTS = ${CCFILES:.c=.o}
 CCDEPENDS = ${CCOBJECTS:.o=.d}
 
 # MAKE METHODS
-${EXEC}: ${CCOBJECTS}
-	${CC} ${CFLAGS} ${LDFLAGS} ${CCOBJECTS} -o ${EXEC} ${LDLIBS}
+%.o: ${CCFILES}
+    $(CC) $(CFLAGS) -c $<
+
+dsd: ${CCOBJECTS}
+	${CC} ${LDFLAGS} ${CCOBJECTS} -o dsd ${LDLIBS}
 
 -include ${CCDEPENDS}
 
 .PHONY: build clean
 
-build: ${EXEC}
+build: dsd
 
 clean:
 	@echo "Cleaning..."
