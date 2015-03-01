@@ -1,6 +1,66 @@
 #include "dsd.h"
 #include "p25p1_const.h"
 
+#if 0
+static unsigned char mfids[36] = {
+    0x00, 0x01, 0x02, 0x04, 0x06, 0x08, 0x0a, 0x0c,
+    0x0d, 0x0e, 0x10, 0x12, 0x14, 0x15, 0x16, 0x18,
+    0x19, 0x1a, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21,
+    0x24, 0x28, 0x29, 0x2c, 0x30, 0x32, 0x34, 0x36,
+    0x38, 0x3c, 0x3e, 0x3f
+};
+#endif
+
+static unsigned char mfid_mapping[64] = {
+     0,  1,  2, 0,  3,  0,  4, 0,
+     5,  0,  6, 0,  7,  8,  9, 0,
+    10,  0, 11, 0, 12, 13, 14, 0,
+    15, 16, 17, 0, 18, 19, 20, 21,
+    22, 23,  0, 0, 24, 0,  0,  0,
+    25, 26,  0, 0, 27, 0,  0,  0,
+    28,  0, 29, 0, 30, 0, 31,  0,
+    32,  0,  0, 0, 33, 0, 34, 35
+};
+
+static const char *mfids[36] = {
+   "Standard MFID (pre-2001)",
+   "Standard MFID (post-2001)",
+   "Aselsan Inc.",
+   "Relm / BK Radio",
+   "EADS Public Safety Inc.",
+   "Cycomm",
+   "Efratom Time and Frequency Products, Inc",
+   "Com-Net Ericsson",
+   "Etherstack",
+   "Datron",
+   "Icom",
+   "Garmin",
+   "GTE",
+   "IFR Systems",
+   "INIT Innovations in Transportation, Inc",
+   "GEC-Marconi",
+   "Harris Corp.",
+   "Kenwood Communications",
+   "Glenayre Electronics",
+   "Japan Radio Co.",
+   "Kokusai",
+   "Maxon",
+   "Midland",
+   "Daniels Electronics Ltd.",
+   "Motorola",
+   "Thales",
+   "M/A-COM",
+   "Raytheon",
+   "SEA",
+   "Securicor",
+   "ADI",
+   "Tait Electronics",
+   "Teletec",
+   "Transcrypt International",
+   "Vertex Standard",
+   "Zetron, Inc"
+};
+
 static void hexdump_p25_packet(unsigned char payload[20][6], unsigned int payload_offset, unsigned int payload_len,
                                char *packetdump)
 {
@@ -36,6 +96,17 @@ void p25_hamming15_11_3_decode(unsigned int *codeword)
   *codeword = (block >> 4);
 }
 
+unsigned int p25_hamming15_11_3_encode(unsigned int codeword_in)
+{
+    unsigned int i, codeword_out = 0u;
+    for(i = 0; i < 11; ++i) {
+        if(codeword_in & (1u << (10 - i))) {
+            codeword_out ^= Hamming15113Gen[i];
+        }
+    }
+    return codeword_out;
+}
+
 static unsigned int mbe_golay2312 (unsigned int in, unsigned int *out)
 {
   unsigned int i, errs = 0, block = in;
@@ -54,32 +125,13 @@ static unsigned int mbe_golay2312 (unsigned int in, unsigned int *out)
   return (errs);
 }
 
-static unsigned int mbe_eccImbe7200x4400C0 (char imbe_fr[23])
-{
-  int j;
-  unsigned int errs, gin = 0, gout;
-
-  for (j = 22; j >= 0; j--) {
-      gin <<= 1;
-      gin |= imbe_fr[j];
-  }
-
-  errs = mbe_golay2312 (gin, &gout);
-  for (j = 11; j >= 0; j--) {
-      imbe_fr[j+11] = (gout & 0x0800) >> 11;
-      gout <<= 1;
-  }
-
-  return (errs);
-}
-
 static void mbe_demodulateImbe7200x4400Data (char imbe[8][23])
 {
   int i, j = 0, k;
   unsigned short pr[115], foo = 0;
 
   // create pseudo-random modulator
-  for (i = 0; i < 12; i++) {
+  for (i = 11; i >= 0; i--) {
       foo <<= 1;
       foo |= imbe[0][11+i];
   }
@@ -365,17 +417,18 @@ processHDU(dsd_opts* opts, dsd_state* state)
   status_count = 21;
 
   // Read 20 hex words, correct them using their Golay23 parity data.
-  for (i=19; i>=0; i--) {
+  //for (i=19; i>=0; i--) {
+  for (i = 0; i < 20; i++) {
       read_and_correct_hdu_hex_word (opts, state, hex_data[i], &status_count);
   }
 
-  // Read the 16 parity hex word. These are used to FEC the 20 hex words using Reed-Solomon.
+  // Skip the 16 parity hex word.
   skip_dibit(opts, state, 9*16, &status_count);
 
   // Now put the corrected data on the DSD structures
   mfid = get_uint(hex_data[12], 6);
-  mfid <<= 6;
-  mfid |= ((hex_data[13][0] << 1) | (hex_data[13][1] << 0));
+  mfid <<= 2;
+  mfid |= ((hex_data[13][1] << 1) | (hex_data[13][0] << 0));
 
   // The important algorithm ID. This indicates whether the data is encrypted,
   // and if so what is the encryption algorithm used.
@@ -401,7 +454,7 @@ processHDU(dsd_opts* opts, dsd_state* state)
     talkgroup  = (get_uint(hex_data[18], 6) << 6);
     talkgroup |= get_uint(hex_data[19], 6);
   } else {
-    talkgroup  = (get_uint(hex_data[17]+2, 4) << 10);
+    talkgroup  = (get_uint(hex_data[17]+2, 4) << 12);
     talkgroup |= (get_uint(hex_data[18], 6) << 6);
     talkgroup |= get_uint(hex_data[19], 6);
   }
@@ -418,6 +471,24 @@ processHDU(dsd_opts* opts, dsd_state* state)
     hexdump_p25_packet(hex_data, 0, 12, mi);
     printf ("mi: %s\n", mi);
   }
+}
+
+static unsigned int Cyclic1685Gen[8] = {
+    0x804e, 0x4027, 0x208f, 0x10db, 0x08f1, 0x04e4, 0x0272, 0x0139
+};
+
+void p25_lsd_cyclic1685_decode(unsigned int *codeword)
+{
+  unsigned int i, block = *codeword, ecc = 0, syndrome;
+  for(i = 0; i < 8; i++) {
+      if((block & Cyclic1685Gen[i]) > 0xff)
+          ecc ^= Cyclic1685Gen[i];
+  }
+  syndrome = ecc ^ block;
+  if (syndrome > 0) {
+      block ^= (1U << (syndrome - 1));
+  }
+  *codeword = (block >> 8);
 }
 
 unsigned int
@@ -479,9 +550,9 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   // extracts IMBE frames from LDU frame
   int i;
   unsigned char mfid = 0, lcformat = 0;
-  unsigned char lsd1 = 0, lsd2 = 0;
+  unsigned int lsd1 = 0, lsd2 = 0;
   //unsigned char hex_data[12][6];    // Data in hex-words (6 bit words). A total of 12 hex words.
-  unsigned char hex_data[3];    // Data in hex-words (6 bit words), stored packed in groups of four, in a uint32_t
+  unsigned int hex_data[3];    // Data in hex-words (6 bit words), stored packed in groups of four, in a uint32_t
   int status_count;
 
   // we skip the status dibits that occur every 36 symbols
@@ -533,21 +604,21 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
 
   // Read data after IMBE 8: LSD (low speed data)
   {
-    unsigned char lsd[8];
+    unsigned char lsd[16];
 
-    read_dibit(opts, state, lsd, 4, &status_count);
-    skip_dibit(opts, state, 4, &status_count);
-    read_dibit(opts, state, lsd+4, 4, &status_count);
-    skip_dibit(opts, state, 4, &status_count);
+    read_dibit(opts, state, lsd,   8, &status_count);
+    read_dibit(opts, state, lsd+8, 8, &status_count);
 
-    for (i=0; i<4; i++) {
+    for (i=0; i<8; i++) {
       lsd1 <<= 2;
       lsd2 <<= 2;
       lsd1 |= lsd[i];
-      lsd2 |= lsd[i+4];
+      lsd2 |= lsd[i+8];
     }
 
-    // TODO: error correction of the LSD bytes...
+    p25_lsd_cyclic1685_decode(&lsd1);
+    p25_lsd_cyclic1685_decode(&lsd2);
+
     // TODO: do something useful with the LSD bytes...
   }
 
@@ -565,6 +636,9 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
       // TODO: do something useful with the status bits...
   }
 
+  state->talkgroup = ((hex_data[1] << 8) | (hex_data[2] >> 24));
+  state->radio_id = (hex_data[2] & 0x00ffffff);
+
   lcformat  = (hex_data[0] & 0xFF);
   mfid  = ((hex_data[0] >> 8) & 0xFF);
   if (opts->errorbars == 1) {
@@ -579,7 +653,8 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
 {
   // extracts IMBE frames from LDU frame
   int i;
-  unsigned char algid = 0, lsd1 = 0, lsd2 = 0;
+  unsigned char algid = 0;
+  unsigned int lsd1 = 0, lsd2 = 0;
   unsigned short kid = 0;
   //unsigned char hex_data[16][6];    // Data in hex-words (6 bit words). A total of 16 hex words.
   unsigned char hex_data[4];    // Data in hex-words (6 bit words). A total of 16 hex words.
@@ -634,21 +709,21 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
 
   // Read data after IMBE 8: LSD (low speed data)
   {
-    unsigned char lsd[8];
+    unsigned char lsd[16];
 
-    read_dibit(opts, state, lsd, 4, &status_count);
-    skip_dibit(opts, state, 4, &status_count);
-    read_dibit(opts, state, lsd+4, 4, &status_count);
-    skip_dibit(opts, state, 4, &status_count);
+    read_dibit(opts, state, lsd,   8, &status_count);
+    read_dibit(opts, state, lsd+8, 8, &status_count);
 
-    for (i=0; i<4; i++) {
+    for (i=0; i<8; i++) {
       lsd1 <<= 2;
       lsd2 <<= 2;
       lsd1 |= lsd[i];
-      lsd2 |= lsd[i+4];
+      lsd2 |= lsd[i+8];
     }
 
-    // TODO: error correction of the LSD bytes...
+    p25_lsd_cyclic1685_decode(&lsd1);
+    p25_lsd_cyclic1685_decode(&lsd2);
+
     // TODO: do something useful with the LSD bytes...
   }
 
@@ -743,13 +818,7 @@ processTDULC (dsd_opts* opts, dsd_state* state)
       }
   }
 
-  for (j = 0; j < 6; j++) {
-      // read both the hex word and the Golay(23, 12) parity information
-      read_dibit(opts, state, hex_and_parity, 12, &status_count);
-
-      // Use the Golay23 FEC to correct it.
-      corrected_hexword = correct_hex_word(state, hex_and_parity, 12);
-  }
+  skip_dibit(opts, state, 72, &status_count);
 
   // Next 10 dibits should be zeros
   skip_dibit(opts, state, 10, &status_count);
@@ -809,6 +878,138 @@ processTDULC (dsd_opts* opts, dsd_state* state)
   }
 }
 
+unsigned int trellis_1_2_decode(uint8_t *in, uint32_t in_sz, uint8_t *out)
+{
+   uint8_t state = 0;
+   unsigned int i, j;
+
+    /* constellation to dibit pair mapping
+    */
+    static const uint8_t NEXT_WORDS[4][4] = {
+        { 0x2, 0xc, 0x1, 0xf },
+        { 0xe, 0x0, 0xd, 0x3 },
+        { 0x9, 0x7, 0xa, 0x4 },
+        { 0x5, 0xb, 0x6, 0x8 }
+    };
+
+   /* bit counts
+    */
+   static const uint8_t BIT_COUNT[] = {
+      0, 1, 1, 2,
+      1, 2, 2, 3,
+      1, 2, 2, 3,
+      2, 3, 3, 4
+   };
+
+   // perform trellis decoding
+   in_sz--;
+   for(i = 1; i < in_sz; ++i) {
+      uint8_t codeword = (in[i] & 0x0f);
+      // find dibit with minimum Hamming distance
+      uint8_t m = 0;
+      uint8_t ns = UINT8_MAX;
+      uint8_t hd = UINT8_MAX;
+      for(j = 0; j < 4; j++) {
+         uint8_t n;
+         n = BIT_COUNT[codeword ^ NEXT_WORDS[state][j]];
+         if(n < hd) {
+            m = 1;
+            hd = n;
+            ns = j;
+         } else if(n == hd) {
+            ++m;
+         }
+      }
+      if(m != 1) {
+        printf("Error: decoding error at offset %u\n", i);
+        return 0;
+      }
+      state = ns;
+      out[i] = state;
+   }
+   return 1;
+}
+
+/* Symbol interleaving, derived from CAI specification table 7.4
+ */
+static const size_t INTERLEAVING[] = {
+    0, 13, 25, 37, 
+    1, 14, 26, 38, 
+    2, 15, 27, 39, 
+    3, 16, 28, 40, 
+    4, 17, 29, 41, 
+    5, 18, 30, 42, 
+    6, 19, 31, 43, 
+    7, 20, 32, 44, 
+    8, 21, 33, 45, 
+    9, 22, 34, 46, 
+   10, 23, 35, 47, 
+   11, 24, 36, 48, 
+   12 
+};
+
+static void
+processTSBK(dsd_opts* opts, dsd_state* state, unsigned char raw_dibits[98], unsigned char out[12], int *status_count)
+{
+  unsigned char trellis_buffer[49];
+  unsigned int i;
+
+  read_dibit(opts, state, raw_dibits, 98, status_count);
+
+  for (i = 0; i < 49; i++) {
+    unsigned int k = INTERLEAVING[i];
+    unsigned char t = ((raw_dibits[2*k] << 2) | (raw_dibits[2*k+1] << 0));
+    trellis_buffer[i] = t;
+  }
+
+  printf("trellis_buffer:\n");
+  for (i = 0; i < 24; i++) {
+    unsigned char c = ((trellis_buffer[2*i] << 4) | trellis_buffer[2*i+1]);
+    printf("0x%02x, ", c);
+    if ((i & 7) == 7) printf("\n");
+  }
+  printf("\n\n");
+
+  for (i = 0; i < 49; i++) {
+    raw_dibits[49] = 0;
+  }
+
+  trellis_1_2_decode(trellis_buffer, 49, raw_dibits); /* raw_dibits actually has decoded dibits here! */
+
+  for(i = 0; i < 12; ++i) {
+    out[i] = ((raw_dibits[4*i] << 6) | (raw_dibits[4*i+1] << 4) | (raw_dibits[4*i+2] << 2) | (raw_dibits[4*i+3] << 0));
+  }
+}
+
+static void
+processTSDU(dsd_opts* opts, dsd_state* state)
+{
+  unsigned char last_block = 0, opcode = 0;
+  int status_count;
+  unsigned char raw_dibits[98];
+  unsigned char out[12];
+
+  // we skip the status dibits that occur every 36 symbols
+  // the next status symbol comes in 14 dibits from here
+  // so we start counter at 36-14-1 = 21
+  status_count = 21;
+
+  processTSBK(opts, state, raw_dibits, out, &status_count);
+  last_block = (out[0] >> 7);
+  opcode = (out[0] & 0x3f);
+  printf("TSDU: lb: %u, opcode: 0x%02x, mfid: 0x%02x\n", last_block, opcode, out[1]);
+
+  processTSBK(opts, state, raw_dibits, out, &status_count);
+  last_block = (out[0] >> 7);
+  opcode = (out[0] & 0x3f);
+  printf("TSDU: lb: %u, opcode: 0x%02x, mfid: 0x%02x\n", last_block, opcode, out[1]);
+
+  processTSBK(opts, state, raw_dibits, out, &status_count);
+  last_block = (out[0] >> 7);
+  opcode = (out[0] & 0x3f);
+  printf("TSDU: lb: %u, opcode: 0x%02x, mfid: 0x%02x\n", last_block, opcode, out[1]);
+}
+
 void process_p25_frame(dsd_opts *opts, dsd_state *state)
 {
   unsigned char duid = state->duid;
@@ -859,7 +1060,8 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state)
       state->talkgroup = 0;
       state->lastp25type = 3;
       // Now processing NID
-      skipDibit (opts, state, 328-25);
+      processTSDU (opts, state);
+      //skipDibit (opts, state, 328-25);
   } else if (duid == 12) { // 30 -> 1100 = 12
       state->lastp25type = 4;
   // try to guess based on previous frame if unknown type

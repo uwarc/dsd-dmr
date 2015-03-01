@@ -153,9 +153,9 @@ processFrame (dsd_opts * opts, dsd_state * state)
       printf ("Sync: %s mod: %s offs: %u      inlvl: %2i%% p25 NAC: 0x%03x, DUID: 0x%x -> %s\n",
               state->ftype, ((state->rf_mod == 2) ? "GFSK" : "QPSK"), state->offset, level,
               state->nac, state->duid, p25frametypes[state->duid]);
-      if (ret) {
+      //if (ret) {
         process_p25_frame (opts, state);
-      }
+      //}
       return;
   }
 
