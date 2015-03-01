@@ -109,6 +109,29 @@ static char *csbk_ids[] = {
     "Talkgroup Data Grant" // 52
 };
 
+static unsigned char TrellisDibitDeinterleave[49] = 
+{
+    0,4,8,12,16,20,24,28,32,36,40,44,48,
+    1,5,9,13,17,21,25,29,33,37,41,45,
+    2,6,10,14,18,22,26,30,34,38,42,46,
+    3,7,11,15,19,23,27,31,35,39,43,47,
+};
+
+static unsigned char TrellisDibitToConstellationPoint[16] = {
+    11, 12, 0, 7, 14, 9, 5, 2, 10, 13, 1, 6, 15, 8, 4, 3
+}; 
+
+static unsigned char STATETABLE[]={
+    0,8,4,12,2,10,6,14,
+    4,12,2,10,6,14,0,8,
+    1,9,5,13,3,11,7,15,
+    5,13,3,11,7,15,1,9,
+    3,11,7,15,1,9,5,13,
+    7,15,1,9,5,13,3,11,
+    2,10,6,14,0,8,4,12,
+    6,14,0,8,4,12,2,10
+};
+
 static unsigned char cach_deinterleave[24] = {
      0,  7,  8,  9,  1, 10, 11, 12,
      2, 13, 14, 15,  3, 16,  4, 17,
@@ -292,8 +315,35 @@ void processEmb (dsd_state *state, unsigned char lcss, unsigned char emb_fr[4][3
   }
 }
 
+static unsigned int tribitExtract (unsigned char tribit[49], unsigned char constellation[49]){
+	unsigned int a, b, rowStart, lastState=0;
+    unsigned char match;
+
+	for (a=0;a<49;a++) {
+		// The lastState variable decides which row of STATETABLE we should use
+		rowStart=lastState*8;
+		match=0;
+		for (b=0;b<8;b++) {
+			// Check if this constellation point matches an element of this row of STATETABLE
+			if (constellation[a] == STATETABLE[rowStart + b]) {
+				// Yes it does
+				match=1;
+				lastState=b;
+				tribit[a]=lastState;
+			}
+		}
+
+		// If no match found then we have a problem
+		if (!match){
+			printf("TRIBIT EXTRACT no match %u !!!\n", a);
+            return 0;
+		}
+	}
+    return 1;
+}
+
 // deinterleaved_data[a] = rawdata[(a*181)%196];
-static void processBPTC(unsigned char infodata[196], unsigned char payload[97])
+static void ProcessBPTC(unsigned char infodata[196], unsigned char payload[97])
 {
   unsigned int i, j, k;
   unsigned char data_fr[196];
@@ -335,6 +385,32 @@ static void processBPTC(unsigned char infodata[196], unsigned char payload[97])
       payload[k] = data_fr[j * 15 + i];
     }
   }
+}
+
+static void ProcessRate34Data(unsigned char infodata[196], unsigned char out[18]){
+    unsigned char ConstellationPoints[49];
+    unsigned char tribits[49];
+    unsigned int a, i = 0, trellisDibit, deinterleave, have_tribits = 0;
+
+	for (a=0;a<196;a=a+4) {
+        trellisDibit = ((infodata[a] << 3) | (infodata[a+1] << 2) | (infodata[a+2] << 1) | (infodata[a+3] << 0));
+		deinterleave = TrellisDibitDeinterleave[i++];
+        ConstellationPoints[deinterleave] = TrellisDibitToConstellationPoint[trellisDibit];
+	}
+	have_tribits = tribitExtract(tribits, ConstellationPoints);
+
+    if (have_tribits) {
+        // lcm(3,8) == 24, so we convert 8 tribits to 3 packed binary bytes at a time.
+	    for (a=0;a<48;a=a+8) {
+            unsigned int tmp = ((tribits[a+2] << 6) | (tribits[a+1] << 3) | (tribits[a] << 0));
+            tmp |= ((tribits[a+5] << 15) | (tribits[a+4] << 12) | (tribits[a+3] << 9));
+            tmp |= ((tribits[a+7] << 12) | (tribits[a+6] << 18));
+            out[3*i  ] = ((tmp >> 0) & 0xFF);
+            out[3*i+1] = ((tmp >> 8) & 0xFF);
+            out[3*i+2] = ((tmp >> 16) & 0xFF);
+            i++;
+	    }
+    }
 }
 
 #ifndef NO_REEDSOLOMON
@@ -388,7 +464,6 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   unsigned int golay_codeword = 0;
   unsigned int bursttype = 0;
   unsigned char fid = 0;
-  unsigned int print_burst = 1;
 
   if (state->firstframe == 1) { // we don't know if anything received before the first sync after no carrier is valid
     //skipDibit(opts, state, 120);
@@ -467,10 +542,6 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   Golay23_Correct(&golay_codeword);
   bursttype = (golay_codeword & 0x0f);
 
-  if (bursttype == 9) {
-    print_burst = 0;
-  }
-
   if ((bursttype == 1) || (bursttype == 2)) {
     closeMbeOutFile (opts, state);
     state->errs2 = 0;
@@ -491,7 +562,7 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
 
   if ((bursttype == 0) || (bursttype == 1) || (bursttype == 2) || (bursttype == 3) || (bursttype == 6) || (bursttype == 7)) {
     for (i = 0; i < 96; i++) payload[i] = 0;
-    processBPTC(infodata, payload);
+    ProcessBPTC(infodata, payload);
   }
 
   for (i = 0; i < 8; i++) {
@@ -501,7 +572,7 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   j = fid_mapping[fid];
   if (j > 15) j = 15;
 
-  if (print_burst == 1) {
+  if (bursttype != 9) {
       int level = (int) state->max / 164;
       printf ("Sync: %s mod: GFSK, offs: %u      inlvl: %2i%% %s %s CACH: 0x%x ",
               state->ftype, state->offset, level, state->slot0light, state->slot1light, cach1_hdr_hamming);
@@ -543,6 +614,17 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
           } else if (bursttype == 7) {
             hexdump_packet(payload, packetdump);
             printf("RATE 1/2 DATA: %s\n", packetdump);
+          } else if (bursttype == 8) {
+            unsigned char payload34[12];
+            ProcessRate34Data(infodata, payload34);
+            for (j = 0; j < 12; j++) {
+                unsigned char l = payload34[j];
+                packetdump[3*j  ] = hex[((l >> 4) & 0x0f)];
+                packetdump[3*j+1] = hex[((l >> 0) & 0x0f)];
+                packetdump[3*j+2] = ' ';
+            }
+            packetdump[36] = '\0';
+            printf("RATE 3/4 DATA: %s\n", packetdump);
           } else {
             printf ("%s\n", slottype_to_string[bursttype]);
           }
@@ -559,7 +641,6 @@ processX2TDMAData (dsd_opts * opts, dsd_state * state)
   unsigned char cachbits[25];
   unsigned int golay_codeword = 0;
   unsigned int bursttype = 0;
-  unsigned int print_burst = 1;
 
   dibit_p = state->dibit_buf_p - 66;
 
@@ -623,14 +704,10 @@ processX2TDMAData (dsd_opts * opts, dsd_state * state)
   Golay23_Correct(&golay_codeword);
   bursttype = (golay_codeword & 0x0f);
 
-  if (bursttype == 8) {
-    print_burst = 0;
-  }
-
   // current slot second half, cach, next slot 1st half
   skipDibit (opts, state, 115);
 
-  if (print_burst) { 
+  if (bursttype != 9) { 
       int level = (int) state->max / 164;
       printf ("Sync: %s mod: QPSK offs: %u      inlvl: %2i%% %s %s ",
               state->ftype, state->offset, level,
