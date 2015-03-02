@@ -260,6 +260,52 @@ static unsigned int processFlco(dsd_state *state, unsigned char payload[97], cha
   return k;
 }
 
+static unsigned int ProcessConnectPlusCSBK(dsd_state *state, unsigned char *payload, unsigned int csbk_id, char csbkstr[1024])
+{
+    // The information to decode these packets was kindly provided by inigo88 on the Radioreference forums
+    // see http://forums.radioreference.com/digital-voice-decoding-software/213131-understanding-connect-plus-trunking-6.html#post1866950
+    //                 67 890123 45 678901 23 456789 01 234567 89 012345 6789 0123 4567 8901 2345 6789
+    // CSBKO=1 + FID=6 00 000001 00 000011 00 000100 00 000101 00 000110 0000 0000 0000 0000 0000 1110
+    //                         1         3         4         5         6                          
+    // bits 40 - 64 have an unknown purpose
+    //
+    unsigned int i, k = 0, src_rid, dest_rid, lcn;
+    if (csbk_id == 1) {
+        unsigned int l = get_uint(payload+40, 24);
+        k = snprintf(csbkstr, 1023, "Trident MS (Motorola) - Connect+ Neighbors: %2u %2u %2u %2u %2u ?: 0x%06x\n",
+                      get_uint(payload, 8), get_uint(payload+8, 8), get_uint(payload+16, 8),
+                      get_uint(payload+24, 8), get_uint(payload+32, 8), l);
+    } else if (csbk_id == 3) {
+        src_rid = get_uint(payload, 24);
+        dest_rid = get_uint(payload+24, 24);
+        lcn = get_uint(payload+48, 4);
+        k = snprintf(csbkstr, 1023, "Trident MS (Motorola) - Connect+ Voice Goto: SourceRId:%u %s:%u LCN:%u Slot:%c ?:0x%x ",
+                      src_rid, (payload[63] ? "DestRId" : "GroupRId"), dest_rid,
+                      lcn, (payload[52] ? '1' : '0'), get_uint(payload+53, 11));
+    } else if (csbk_id == 6) {
+        src_rid = get_uint(payload, 24);
+        lcn = get_uint(payload+24, 4);
+        k = snprintf(csbkstr, 1023, "Trident MS (Motorola) - Connect+ Data Goto: RadioId:%u LCN:%u Slot:%c ?: 0x%X 0x%08x ",
+                      src_rid, lcn, (payload[28] ? '1' : '0'),
+                      get_uint(payload+29, 5), get_uint(payload+32, 32));
+    } else if (csbk_id == 24) {
+        src_rid = get_uint(payload, 24);
+        dest_rid = get_uint(payload+24, 24);
+        k = snprintf(csbkstr, 1023, "Trident MS (Motorola) - Connect+ Affiliate: SourceRId:%u GroupRId:%u ?:0x%x ",
+                      src_rid, dest_rid, get_uint(payload+48, 24));  
+    } else {
+        k = snprintf(csbkstr, 1023, "Unknown Trident MS (Motorola) - Connect+ CSBK: CSBKO: %u, packet_dump: ", csbk_id);
+        for (i = 0; i < 8; i++) {
+            unsigned int l = get_uint(payload+i*8, 8);
+            csbkstr[k++] = hex[((l >> 4) & 0x0f)];
+            csbkstr[k++] = hex[((l >> 0) & 0x0f)];
+            csbkstr[k++] = ' ';
+        }
+        csbkstr[k] = '\0';
+    }
+    return k;
+}
+
 void processEmb (dsd_state *state, unsigned char lcss, unsigned char emb_fr[4][32])
 {
   int i, k;
@@ -607,7 +653,14 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
                      ((payload[1] == '1') ? "TGrp" : "TGid"),
                      txid, rxid);
             } else {
-              printf("CSBK: id: 0x%x\n", csbk_id);
+              if (fid == 6) {
+                char csbkstr[1024];
+                csbkstr[0] = '\0';
+                ProcessConnectPlusCSBK(state, payload+16, csbk_id, csbkstr);
+                printf("%s\n", csbkstr);
+              } else {
+                printf("CSBK: id: 0x%x\n", csbk_id);
+              }
             }
           } else if (bursttype == 6) {
             process_dataheader(payload);
