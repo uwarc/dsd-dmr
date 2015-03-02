@@ -609,15 +609,23 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
     read_dibit(opts, state, lsd,   8, &status_count);
     read_dibit(opts, state, lsd+8, 8, &status_count);
 
-    for (i=0; i<8; i++) {
+    for (i=0; i<4; i++) {
       lsd1 <<= 2;
       lsd2 <<= 2;
       lsd1 |= lsd[i];
-      lsd2 |= lsd[i+8];
+      lsd2 |= lsd[i+4];
+    }
+
+    for (i=0; i<4; i++) {
+      lsd1 <<= 2;
+      lsd2 <<= 2;
+      lsd1 |= lsd[8+i];
+      lsd2 |= lsd[8+i+4];
     }
 
     p25_lsd_cyclic1685_decode(&lsd1);
     p25_lsd_cyclic1685_decode(&lsd2);
+    printf ("lsd1: 0x%02x, lsd2: 0x%02x ", lsd1, lsd2);
 
     // TODO: do something useful with the LSD bytes...
   }
@@ -625,16 +633,8 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   // IMBE 9
   process_IMBE (opts, state, &status_count);
 
-  if (opts->p25status == 1) {
-      printf ("lsd1: 0x%02x, lsd2: 0x%02x ", lsd1, lsd2);
-  }
-
   // trailing status symbol
-  {
-      //int status = getDibit (opts, state);
-      getDibit (opts, state);
-      // TODO: do something useful with the status bits...
-  }
+  getDibit (opts, state);
 
   state->talkgroup = ((hex_data[1] << 8) | (hex_data[2] >> 24));
   state->radio_id = (hex_data[2] & 0x00ffffff);
@@ -714,15 +714,23 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
     read_dibit(opts, state, lsd,   8, &status_count);
     read_dibit(opts, state, lsd+8, 8, &status_count);
 
-    for (i=0; i<8; i++) {
+    for (i=0; i<4; i++) {
       lsd1 <<= 2;
       lsd2 <<= 2;
       lsd1 |= lsd[i];
-      lsd2 |= lsd[i+8];
+      lsd2 |= lsd[i+4];
+    }
+
+    for (i=0; i<4; i++) {
+      lsd1 <<= 2;
+      lsd2 <<= 2;
+      lsd1 |= lsd[8+i];
+      lsd2 |= lsd[8+i+4];
     }
 
     p25_lsd_cyclic1685_decode(&lsd1);
     p25_lsd_cyclic1685_decode(&lsd2);
+    printf ("lsd1: 0x%02x, lsd2: 0x%02x ", lsd1, lsd2);
 
     // TODO: do something useful with the LSD bytes...
   }
@@ -730,16 +738,8 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   // IMBE 9
   process_IMBE (opts, state, &status_count);
 
-  if (opts->p25status == 1) {
-      printf ("lsd1: 0x%02x, lsd2: 0x%02x ", lsd1, lsd2);
-  }
-
   // trailing status symbol
-  {
-      //int status = getDibit (opts, state) + '0';
-      getDibit (opts, state);
-      // TODO: do something useful with the status bits...
-  }
+  getDibit (opts, state);
 
   algid  = (hex_data[3] & 0xFF);
 
@@ -766,11 +766,7 @@ processTDU (dsd_opts* opts, dsd_state* state)
     skipDibit(opts, state, 14);
 
     // Next we should find an status dibit
-    {
-        //int status = getDibit (opts, state) + '0';
-        getDibit (opts, state);
-        // TODO: do something useful with the status bits...
-    }
+    getDibit (opts, state);
 }
 
 /**
@@ -829,11 +825,7 @@ processTDULC (dsd_opts* opts, dsd_state* state)
   }
 
   // trailing status symbol
-  {
-      //int status = getDibit (opts, state) + '0';
-      getDibit (opts, state);
-      // TODO: do something useful with the status bits...
-  }
+  getDibit (opts, state);
 
   // Put the corrected data into the DSD structures
   lcformat = get_uint(dodeca_data[5], 8);
@@ -903,7 +895,7 @@ unsigned int trellis_1_2_decode(uint8_t *in, uint32_t in_sz, uint8_t *out)
 
    // perform trellis decoding
    in_sz--;
-   for(i = 1; i < in_sz; ++i) {
+   for(i = 0; i < in_sz; ++i) {
       uint8_t codeword = (in[i] & 0x0f);
       // find dibit with minimum Hamming distance
       uint8_t m = 0;
@@ -962,14 +954,6 @@ processTSBK(dsd_opts* opts, dsd_state* state, unsigned char raw_dibits[98], unsi
     trellis_buffer[i] = t;
   }
 
-  printf("trellis_buffer:\n");
-  for (i = 0; i < 24; i++) {
-    unsigned char c = ((trellis_buffer[2*i] << 4) | trellis_buffer[2*i+1]);
-    printf("0x%02x, ", c);
-    if ((i & 7) == 7) printf("\n");
-  }
-  printf("\n\n");
-
   for (i = 0; i < 49; i++) {
     raw_dibits[49] = 0;
   }
@@ -994,20 +978,12 @@ processTSDU(dsd_opts* opts, dsd_state* state)
   // so we start counter at 36-14-1 = 21
   status_count = 21;
 
-  processTSBK(opts, state, raw_dibits, out, &status_count);
-  last_block = (out[0] >> 7);
-  opcode = (out[0] & 0x3f);
-  printf("TSDU: lb: %u, opcode: 0x%02x, mfid: 0x%02x\n", last_block, opcode, out[1]);
-
-  processTSBK(opts, state, raw_dibits, out, &status_count);
-  last_block = (out[0] >> 7);
-  opcode = (out[0] & 0x3f);
-  printf("TSDU: lb: %u, opcode: 0x%02x, mfid: 0x%02x\n", last_block, opcode, out[1]);
-
-  processTSBK(opts, state, raw_dibits, out, &status_count);
-  last_block = (out[0] >> 7);
-  opcode = (out[0] & 0x3f);
-  printf("TSDU: lb: %u, opcode: 0x%02x, mfid: 0x%02x\n", last_block, opcode, out[1]);
+  while (!last_block) {
+    processTSBK(opts, state, raw_dibits, out, &status_count);
+    last_block = (out[0] >> 7);
+    opcode = (out[0] & 0x3f);
+    printf("TSDU: lb: %u, opcode: 0x%02x, mfid: 0x%02x\n", last_block, opcode, out[1]);
+  }
 }
 
 void process_p25_frame(dsd_opts *opts, dsd_state *state)
