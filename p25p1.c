@@ -98,9 +98,30 @@ static char *lcwids[32] = {
     "Network Status Broadcast - Explicit"
 };
 
+static unsigned int Hamming1064Gen[6] = {
+    0x20e, 0x10d, 0x08b, 0x047, 0x023, 0x01c
+};
+
 static unsigned int Hamming15113Gen[11] = {
     0x400f, 0x200e, 0x100d, 0x080c, 0x040b, 0x020a, 0x0109, 0x0087, 0x0046, 0x0025, 0x0013
 };
+
+void p25_hamming10_6_4_decode(unsigned int *codeword)
+{
+  unsigned int i, block = *codeword, ecc = 0, syndrome;
+
+  for(i = 0; i < 6; i++) {
+      if((block & Hamming1064Gen[i]) > 0xf)
+          ecc ^= Hamming1064Gen[i];
+  }
+  syndrome = ecc ^ block;
+
+  if (syndrome > 0) {
+      block ^= (1U << (syndrome - 1));
+  }
+
+  *codeword = (block >> 4);
+}
 
 void p25_hamming15_11_3_decode(unsigned int *codeword)
 {
@@ -502,29 +523,29 @@ read_and_correct_hex_word (dsd_opts* opts, dsd_state* state, int* status_count)
       value_in[3] |= hex_and_parity[i+15];
   }
   value = value_in[0];
-  p25_hamming15_11_3_decode(&value);
-  value &= 0x3f; value_in[0] >>= 4;
+  p25_hamming10_6_4_decode(&value);
+  value_in[0] >>= 4;
   if (value != value_in[0]) { state->debug_header_errors++; }
   value_out <<= 6;
   value_out |= value;
 
   value = value_in[1];
-  p25_hamming15_11_3_decode(&value);
-  value &= 0x3f; value_in[1] >>= 4;
+  p25_hamming10_6_4_decode(&value);
+  value_in[1] >>= 4;
   if (value != value_in[1]) { state->debug_header_errors++; }
   value_out <<= 6;
   value_out |= value;
 
   value = value_in[2];
-  p25_hamming15_11_3_decode(&value);
-  value &= 0x3f; value_in[2] >>= 4;
+  p25_hamming10_6_4_decode(&value);
+  value_in[2] >>= 4;
   if (value != value_in[2]) { state->debug_header_errors++; }
   value_out <<= 6;
   value_out |= value;
 
   value = value_in[3];
-  p25_hamming15_11_3_decode(&value);
-  value &= 0x3f; value_in[3] >>= 4;
+  p25_hamming10_6_4_decode(&value);
+  value_in[3] >>= 4;
   if (value != value_in[3]) { state->debug_header_errors++; }
   value_out <<= 6;
   value_out |= value;
@@ -824,7 +845,6 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
 
     p25_lsd_cyclic1685_decode(&lsd1);
     p25_lsd_cyclic1685_decode(&lsd2);
-    printf ("lsd1: 0x%02x, lsd2: 0x%02x\n", lsd1, lsd2);
 
     // TODO: do something useful with the LSD bytes...
   }
@@ -836,8 +856,8 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   getDibit (opts, state);
 
   if (opts->errorbars == 1) {
-    printf ("LDU2: e: %u, talkgroup: %u, src: %u\n",
-            state->errs2, state->talkgroup, state->radio_id);
+    printf ("LDU2: e: %u, talkgroup: %u, src: %u lsd1: 0x%02x, lsd2: 0x%02x\n",
+            state->errs2, state->talkgroup, state->radio_id, lsd1, lsd2);
   }
 }
 
