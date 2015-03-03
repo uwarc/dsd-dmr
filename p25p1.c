@@ -119,17 +119,6 @@ void p25_hamming15_11_3_decode(unsigned int *codeword)
   *codeword = (block >> 4);
 }
 
-unsigned int p25_hamming15_11_3_encode(unsigned int codeword_in)
-{
-    unsigned int i, codeword_out = 0u;
-    for(i = 0; i < 11; ++i) {
-        if(codeword_in & (1u << (10 - i))) {
-            codeword_out ^= Hamming15113Gen[i];
-        }
-    }
-    return codeword_out;
-}
-
 static unsigned int mbe_golay2312 (unsigned int in, unsigned int *out)
 {
   unsigned int i, errs = 0, block = in;
@@ -550,8 +539,8 @@ decode_lcf(dsd_state* state, unsigned char lcformat, unsigned int hexdata[3])
   unsigned int radio_id = (hexdata[2] & 0x00ffffff);
   unsigned int channel = 0;
   if (lcformat == 0) {
-    printf ("LCW: Group Voice Ch User %s, talkgroup: %u, radio id: %u (session mode: %s)\n",
-            ((hexdata[1] & 0x00800000) ? "Emergency" : ""),  radio_id, (talkgroup & 0xffff),
+    printf ("LCW: Group Voice Ch User%s, talkgroup: %u, radio id: %u (session mode: %s)\n",
+            ((hexdata[1] & 0x00800000) ? " Emergency" : ""),  (talkgroup & 0xffff), radio_id,
             ((hexdata[1] & 0x00100000) ? "Circuit" : "Packet"));
   } else if (lcformat == 1) {
     printf ("LCW: Reserved (1)\n");
@@ -717,28 +706,25 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
 
   // Read data after IMBE 8: LSD (low speed data)
   {
-    unsigned char lsd[16];
+    unsigned char lsd[8];
 
-    read_dibit(opts, state, lsd,   8, &status_count);
-    read_dibit(opts, state, lsd+8, 8, &status_count);
+    read_dibit(opts, state, lsd, 8, &status_count);
 
-    for (i=0; i<4; i++) {
+    for (i=0; i<8; i++) {
       lsd1 <<= 2;
-      lsd2 <<= 2;
       lsd1 |= lsd[i];
-      lsd2 |= lsd[i+4];
     }
 
-    for (i=0; i<4; i++) {
-      lsd1 <<= 2;
+    read_dibit(opts, state, lsd, 8, &status_count);
+
+    for (i=0; i<8; i++) {
       lsd2 <<= 2;
-      lsd1 |= lsd[8+i];
-      lsd2 |= lsd[8+i+4];
+      lsd2 |= lsd[i];
     }
 
     p25_lsd_cyclic1685_decode(&lsd1);
     p25_lsd_cyclic1685_decode(&lsd2);
-    printf ("lsd1: 0x%02x, lsd2: 0x%02x ", lsd1, lsd2);
+    printf ("lsd1: 0x%02x, lsd2: 0x%02x\n", lsd1, lsd2);
 
     // TODO: do something useful with the LSD bytes...
   }
@@ -820,28 +806,25 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
 
   // Read data after IMBE 8: LSD (low speed data)
   {
-    unsigned char lsd[16];
+    unsigned char lsd[8];
 
-    read_dibit(opts, state, lsd,   8, &status_count);
-    read_dibit(opts, state, lsd+8, 8, &status_count);
+    read_dibit(opts, state, lsd, 8, &status_count);
 
-    for (i=0; i<4; i++) {
+    for (i=0; i<8; i++) {
       lsd1 <<= 2;
-      lsd2 <<= 2;
       lsd1 |= lsd[i];
-      lsd2 |= lsd[i+4];
     }
 
-    for (i=0; i<4; i++) {
-      lsd1 <<= 2;
+    read_dibit(opts, state, lsd, 8, &status_count);
+
+    for (i=0; i<8; i++) {
       lsd2 <<= 2;
-      lsd1 |= lsd[8+i];
-      lsd2 |= lsd[8+i+4];
+      lsd2 |= lsd[i];
     }
 
     p25_lsd_cyclic1685_decode(&lsd1);
     p25_lsd_cyclic1685_decode(&lsd2);
-    printf ("lsd1: 0x%02x, lsd2: 0x%02x ", lsd1, lsd2);
+    printf ("lsd1: 0x%02x, lsd2: 0x%02x\n", lsd1, lsd2);
 
     // TODO: do something useful with the LSD bytes...
   }
@@ -894,7 +877,7 @@ processTDULC (dsd_opts* opts, dsd_state* state)
   unsigned int i, j, corrected_hexword = 0;
   unsigned char hex_and_parity[12];
   unsigned char lcformat = 0, mfid = 0;
-  char lcinfo[57];
+  unsigned int lcinfo[3];
   unsigned char dodeca_data[6][12];    // Data in 12-bit words. A total of 6 words.
   int status_count;
 
@@ -934,49 +917,15 @@ processTDULC (dsd_opts* opts, dsd_state* state)
   lcformat = get_uint(dodeca_data[5], 8);
   mfid  = ((get_uint(dodeca_data[5]+8, 4) << 4) | (get_uint(dodeca_data[4], 4) << 0));
 
-  {
-    static const char hex[]="0123456789abcdef";
-    unsigned int l = get_uint(dodeca_data[4]+4, 8);
-    lcinfo[0] = hex[((l >> 4) & 0x0f)];
-    lcinfo[1] = hex[((l >> 0) & 0x0f)];
-    lcinfo[2] = ' ';
-    l = get_uint(dodeca_data[3], 8);
-    lcinfo[3] = hex[((l >> 4) & 0x0f)];
-    lcinfo[4] = hex[((l >> 0) & 0x0f)];
-    lcinfo[5] = ' ';
-    l = get_uint(dodeca_data[3]+8, 4);
-    lcinfo[6] = hex[((l >> 0) & 0x0f)];
-    l = get_uint(dodeca_data[2], 4);
-    lcinfo[7] = hex[((l >> 0) & 0x0f)];
-    lcinfo[8] = ' ';
-    l = get_uint(dodeca_data[2]+4, 8);
-    lcinfo[9] = hex[((l >> 4) & 0x0f)];
-    lcinfo[10] = hex[((l >> 0) & 0x0f)];
-    lcinfo[11] = ' ';
-    l = get_uint(dodeca_data[1], 8);
-    lcinfo[12] = hex[((l >> 4) & 0x0f)];
-    lcinfo[13] = hex[((l >> 0) & 0x0f)];
-    lcinfo[14] = ' ';
-    l = get_uint(dodeca_data[1]+8, 4);
-    lcinfo[15] = hex[((l >> 0) & 0x0f)];
-    l = get_uint(dodeca_data[0], 4);
-    lcinfo[16] = hex[((l >> 0) & 0x0f)];
-    lcinfo[17] = ' ';
-    l = get_uint(dodeca_data[0]+4, 8);
-    lcinfo[18] = hex[((l >> 4) & 0x0f)];
-    lcinfo[19] = hex[((l >> 0) & 0x0f)];
-    lcinfo[20] = '\0';
-  }
+  lcinfo[0] = ((mfid << 8) | get_uint(dodeca_data[4]+4, 8));
+  lcinfo[1]  = (get_uint(dodeca_data[3], 12) << 12);
+  lcinfo[1] |= (get_uint(dodeca_data[2], 12));
+  lcinfo[2]  = (get_uint(dodeca_data[1], 12) << 12);
+  lcinfo[2] |= (get_uint(dodeca_data[0], 12));
 
   if (opts->errorbars == 1) {
-      unsigned int lcinfo_hex[3];
-      lcinfo_hex[0] = ((mfid << 8) | get_uint(dodeca_data[4]+4, 8));
-      lcinfo_hex[1]  = (get_uint(dodeca_data[3], 12) << 12);
-      lcinfo_hex[1] |= (get_uint(dodeca_data[2], 12));
-      lcinfo_hex[2]  = (get_uint(dodeca_data[1], 12) << 12);
-      lcinfo_hex[2] |= (get_uint(dodeca_data[0], 12));
-      printf ("mfid: %u, lcformat: 0x%02x, lcinfo: %s\n", mfid, lcformat, lcinfo);
-      decode_lcf(state, lcformat>>2, lcinfo_hex);
+      printf ("mfid: %u, lcformat: 0x%02x, lcinfo: 0x%03x 0x%03x 0x%03x\n", mfid, lcformat, lcinfo[0], lcinfo[1], lcinfo[2]);
+      decode_lcf(state, lcformat>>2, lcinfo);
   }
 }
 
