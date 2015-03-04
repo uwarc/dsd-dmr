@@ -246,35 +246,6 @@ def rs_24_12_13_encode(data):
             codeword[i] ^= gf6mult(hexbit, matrix[j][i])
     return codeword
 
-# (24,16,9) shortened Reed-Solomon encoder
-# argument is an integer
-# returns an integer
-def rs_24_16_9_encode(data):
-    matrix = (
-        (1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,051,045,067,015,064,067,052,012),
-        (0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,057,025,063,073,071,022,040,015),
-        (0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,005,001,031,004,016,054,025,076),
-        (0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,073,007,047,014,041,077,047,011),
-        (0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,075,015,051,051,017,067,017,057),
-        (0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,020,032,014,042,075,042,070,054),
-        (0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,002,075,043,005,001,040,012,064),
-        (0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,024,074,015,072,024,026,074,061),
-        (0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,042,064,007,022,061,020,040,065),
-        (0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,032,032,055,041,057,066,021,077),
-        (0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,065,036,025,007,050,016,040,051),
-        (0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,064,006,054,032,076,046,014,036),
-        (0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,062,063,074,070,005,027,037,046),
-        (0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,055,043,034,071,057,076,050,064),
-        (0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,024,023,023,005,050,070,042,023),
-        (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,067,075,045,060,057,024,006,026))
-    assert data < 2**96
-    codeword = [0,] * 24
-    for i in range(24):
-        for j in range(16):
-            hexbit = (data >> ((15 - j) * 6)) & 0x3f
-            codeword[i] ^= gf6mult(hexbit, matrix[j][i])
-    return codeword
-
 # (24,12,8) extended Golay encoder
 # argument is an integer
 # returns an integer
@@ -375,7 +346,6 @@ def ldu_hamming(rs_codeword):
     for i in range(24):
         out <<= 10
         out |= hamming_10_6_3_encode(rs_codeword[i])
-        #out |= hamming_15_11_3_encode(rs_codeword[i])
     return out
 
 # sequence of golay encodings for xTDU
@@ -538,25 +508,6 @@ def construct_lc(lco, mfid, svcopt, s, tgid, dst, src):
 
     text_out("\t\tLCW   = %018x\n" % lc)
     return lc
-
-# arguments are integers
-# returns an integer
-def construct_es(mi, algid, kid):
-    text_out("\tEncryption Sync Word:\n")
-
-    assert mi    <= 0xffffffffffffffffffL
-    assert algid <= 0xff
-    assert kid   <= 0xffff
-
-    es = mi << 24
-    es |= algid << 16
-    es |= kid
-
-    text_out("\t\tMI    = %018x\n" % mi)
-    text_out("\t\tALGID = %02x\n" % algid)
-    text_out("\t\tKID   = %04x\n" % kid)
-    text_out("\t\tESW   = %024x\n" % es)
-    return es
 
 # arguments are integers
 # returns an integer
@@ -772,14 +723,11 @@ def construct_ef(efclass, operand, arguments):
 ##############################
 
 # Header Data Unit
-def construct_hdu(nac, ss, mi, mfid, algid, kid, tgid):
+def construct_hdu(nac, ss, mfid, tgid):
     text_out("Header Data Unit:\n")
 
     assert nac   <= 0xfff
     assert ss    <= 0x3
-    assert mi    <= 0xffffffffffffffffffL
-    assert algid <= 0xff
-    assert kid   <= 0xffff
     assert tgid  <= 0xffff
 
     duid  = 0x0
@@ -789,11 +737,10 @@ def construct_hdu(nac, ss, mi, mfid, algid, kid, tgid):
     symbols = start_packet(nac, duid)
 
     # HDU codeword
+    algid = 0x80
     hdr = 0
-    hdr |= mi    << 48
     hdr |= mfid  << 40
     hdr |= algid << 32
-    hdr |= kid   << 16
     hdr |= tgid
 
     rs_codeword = rs_36_20_17_encode(hdr)
@@ -802,10 +749,7 @@ def construct_hdu(nac, ss, mi, mfid, algid, kid, tgid):
     text_out("\tDUID  = %01x\n" % duid)
     text_out("\tNAC   = %03x\n" % nac)
     text_out("\tSSym  = %d %d %d %d %d %d %d %d %d %d %d\n" % ssyms)
-    text_out("\tMI    = %018x\n" % mi)
     text_out("\tMFID  = %02x\n" % mfid)
-    text_out("\tALGID = %02x\n" % algid)
-    text_out("\tKID   = %04x\n" % kid)
     text_out("\tTGID  = %04x\n" % tgid)
     text_out("\tSymbol data:\n")
     print_spec(insert_status(symbols, ssyms))
@@ -868,16 +812,13 @@ def construct_ldu1(nac, ss, imbe, lsd, lco, mfid, svcopt, s, tgid, dst, src):
     print_spec(insert_status(symbols, ssyms))
 
 # Logical Link Data Unit 2
-def construct_ldu2(nac, ss, imbe, lsd, mi, algid, kid):
+def construct_ldu2(nac, ss, imbe, lsd):
     text_out("Logical Link Data Unit 2:\n")
 
     assert nac   <= 0xfff
     assert ss    <= 0x3
     assert imbe  <= 0xffffffffffffffffffffffffffffffffffffL
     assert lsd   <= 0xffffffff
-    assert mi    <= 0xffffffffffffffffffL
-    assert algid <= 0xff
-    assert kid   <= 0xffff
 
     duid  = 0xa
 
@@ -891,9 +832,9 @@ def construct_ldu2(nac, ss, imbe, lsd, mi, algid, kid):
 
     symbols = start_packet(nac, duid)
 
-    # Encryption Sync Word
-    es = construct_es(mi, algid, kid)
-    rs_codeword = rs_24_16_9_encode(es)
+    # Encryption Sync Word, mi = 0, algid = 0x80 (no encryption), kid = 0
+    rs_codeword = [ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x20, 0x00, 0x00, 0x00, 0x2b, 0x0b, 0x22, 0x24, 0x26, 0x3d, 0x31, 0x35 ]
     es_syms = split_dibits(ldu_hamming(rs_codeword), 120)
 
     # Low Speed Data
@@ -1666,14 +1607,8 @@ if __name__ == "__main__":
         help="Network Access Code (Default: 0x293)")
     parser.add_option("--ss", type="int", default=0,
         help="Status Symbol (one value to be repeated) (Default: 0)")
-    parser.add_option("--mi", type="int", default=0,
-        help="Message Indicator (Default: 0x000000000000000000)")
     parser.add_option("--mfid", type="int", default=0,
         help="Manufacturer ID (Default: 0x00)")
-    parser.add_option("--algid", type="int", default=0x80,
-        help="Algorithm ID (Default: 0x80)")
-    parser.add_option("--kid", type="int", default=0,
-        help="Key ID (Default: 0x0000)")
     parser.add_option("--tgid", type="int", default=1,
         help="Talk Group ID (Default: 0x0001)")
     parser.add_option("--lco", type="int", default=0,
@@ -1745,10 +1680,7 @@ if __name__ == "__main__":
 
     assert options.nac     <= 0xfff
     assert options.ss      <= 0b11
-    assert options.mi      <= 0xffffffffffffffffffL
     assert options.mfid    <= 0xff
-    assert options.algid   <= 0xff
-    assert options.kid     <= 0xffff
     assert options.tgid    <= 0xffff
     assert options.lco     <= 0x3f
     assert options.src     <= 0xffffff
@@ -1839,31 +1771,24 @@ if __name__ == "__main__":
 
     if options.superframes:
         if not options.late:
-            construct_hdu(options.nac, options.ss, options.mi, options.mfid,
-                    options.algid, options.kid, options.tgid)
+            construct_hdu(options.nac, options.ss, options.mfid, options.tgid)
         for i in range(options.superframes):
             construct_ldu1(options.nac, options.ss, options.imbe,
                     options.lsd, options.lco, options.mfid,
                     options.svcopt, 0, options.tgid,
                     options.dst, options.src)
-            construct_ldu2(options.nac, options.ss, options.imbe,
-                    options.lsd, options.mi, options.algid,
-                    options.kid)
+            construct_ldu2(options.nac, options.ss, options.imbe, options.lsd)
         construct_stdu(options.nac, options.ss)
     else:
         if options.hdu:
-            construct_hdu(options.nac, options.ss, options.mi,
-                    options.mfid, options.algid, options.kid,
-                    options.tgid)
+            construct_hdu(options.nac, options.ss, options.mfid, options.tgid)
         elif options.ldu1:
             construct_ldu1(options.nac, options.ss, options.imbe,
                     options.lsd, options.lco, options.mfid,
                     options.svcopt, 0, options.tgid,
                     options.dst, options.src)
         elif options.ldu2:
-            construct_ldu2(options.nac, options.ss, options.imbe,
-                    options.lsd, options.mi, options.algid,
-                    options.kid)
+            construct_ldu2(options.nac, options.ss, options.imbe, options.lsd)
         elif options.stdu:
             construct_stdu(options.nac, options.ss)
         elif options.xtdu:
