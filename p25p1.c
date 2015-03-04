@@ -380,50 +380,34 @@ correct_hex_word (dsd_state* state, unsigned char *hex_and_parity, unsigned int 
   return golay_codeword;
 }
 
+static inline void hex_to_bin(unsigned char *output, unsigned int input)
+{
+  output[0] = ((input >> 5) & 1);
+  output[1] = ((input >> 4) & 1);
+  output[2] = ((input >> 3) & 1);
+  output[3] = ((input >> 2) & 1);
+  output[4] = ((input >> 1) & 1);
+  output[5] = ((input >> 0) & 1);
+}
+
 /**
  * Reads an hex word, its parity bits and attempts to error correct it using the Golay23 algorithm.
  */
-static unsigned int 
-read_and_correct_hdu_hex_word (dsd_opts* opts, dsd_state* state, int* status_count)
+static void
+read_and_correct_hdu_hex_word (dsd_opts* opts, dsd_state* state, unsigned char* hex, int* status_count)
 {
-  unsigned int golay_codeword_old, golay_codeword = 0;
-  unsigned char hex_and_parity[9];
+  unsigned int corrected_hexword = 0;
+  unsigned char hex_and_parity[18];
 
   // read both the hex word and the Golay(23, 12) parity information
   read_dibit(opts, state, hex_and_parity, 9, status_count);
-  golay_codeword <<= 2;
-  golay_codeword |= hex_and_parity[0];
-  golay_codeword <<= 2;
-  golay_codeword |= hex_and_parity[1];
-  golay_codeword <<= 2;
-  golay_codeword |= hex_and_parity[2];
-  golay_codeword <<= 2;
-  golay_codeword |= hex_and_parity[3];
-  golay_codeword <<= 2;
-  golay_codeword |= hex_and_parity[4];
-  golay_codeword <<= 2;
-  golay_codeword |= hex_and_parity[5];
-  golay_codeword <<= 2;
-  golay_codeword |= hex_and_parity[6];
-  golay_codeword <<= 2;
-  golay_codeword |= hex_and_parity[7];
-  golay_codeword <<= 2;
-  golay_codeword |= hex_and_parity[8];
-  golay_codeword >>= 1;
-  golay_codeword_old = golay_codeword;
 
   // Use the Golay23 FEC to correct it.
-  Golay23_Correct(&golay_codeword);
-
-  golay_codeword &= 0x3f;
-  golay_codeword_old >>= 11;
-
-  if (golay_codeword_old != golay_codeword) {
-    state->debug_header_errors++;
-  }
+  corrected_hexword = correct_hex_word(state, hex_and_parity, 9);
 
   // codeword is now hopefully fixed
-  return golay_codeword;
+  // put it back into our hex format
+  hex_to_bin(hex, corrected_hexword);
 }
 
 void update_p25_error_stats (dsd_state* state, unsigned int nbits, unsigned int n_errs)
@@ -456,7 +440,7 @@ processHDU(dsd_opts* opts, dsd_state* state)
   unsigned char algid = 0;
   unsigned int talkgroup = 0;
   int status_count;
-  unsigned int hex_data[20];    // Data in hex-words (6 bit words). A total of 20 hex words.
+  unsigned char hex_data[20][6];    // Data in hex-words (6 bit words). A total of 20 hex words.
 
   // we skip the status dibits that occur every 36 symbols
   // the next status symbol comes in 14 dibits from here
@@ -464,33 +448,34 @@ processHDU(dsd_opts* opts, dsd_state* state)
   status_count = 21;
 
   // Read 20 hex words, correct them using their Golay23 parity data.
+  //for (i=19; i>=0; i--) {
   for (i = 0; i < 20; i++) {
-      hex_data[i] = read_and_correct_hdu_hex_word (opts, state, &status_count);
+      read_and_correct_hdu_hex_word (opts, state, hex_data[i], &status_count);
   }
 
   // Skip the 16 parity hex word.
   skip_dibit(opts, state, 9*16, &status_count);
 
   // Now put the corrected data on the DSD structures
-  mfid = hex_data[12];
+  mfid = get_uint(hex_data[12], 6);
   mfid <<= 2;
-  mfid |= (hex_data[13] & 0x03);
+  mfid |= ((hex_data[13][1] << 1) | (hex_data[13][0] << 0));
 
   // The important algorithm ID. This indicates whether the data is encrypted,
   // and if so what is the encryption algorithm used.
   // A code 0x80 here means that the data is unencrypted.
-  algid  = ((hex_data[13] >> 2) << 4);
-  algid |= (hex_data[14] & 0x0f);
+  algid  = (get_uint(hex_data[13]+2, 4) << 4);
+  algid |= (get_uint(hex_data[14], 4) << 0);
 
   skipDibit (opts, state, 6);
 
   if ((mfid == 144) || (mfid == 9)) { // FIXME: only one of these is correct.
-    talkgroup  = (hex_data[18] << 6);
-    talkgroup |=  hex_data[19];
+    talkgroup  = (get_uint(hex_data[18], 6) << 6);
+    talkgroup |= get_uint(hex_data[19], 6);
   } else {
-    talkgroup  = ((hex_data[17] & 0x0f) << 12);
-    talkgroup |= (hex_data[18] << 6);
-    talkgroup |= hex_data[19];
+    talkgroup  = (get_uint(hex_data[17]+2, 4) << 12);
+    talkgroup |= (get_uint(hex_data[18], 6) << 6);
+    talkgroup |= get_uint(hex_data[19], 6);
   }
 
   state->talkgroup = talkgroup;
@@ -539,7 +524,6 @@ read_and_correct_hex_word (dsd_opts* opts, dsd_state* state, int* status_count)
   }
   value = value_in[0];
   p25_hamming10_6_4_decode(&value);
-  value &= 0x3f;
   value_in[0] >>= 4;
   if (value != value_in[0]) { state->debug_header_errors++; }
   value_out <<= 6;
@@ -547,7 +531,6 @@ read_and_correct_hex_word (dsd_opts* opts, dsd_state* state, int* status_count)
 
   value = value_in[1];
   p25_hamming10_6_4_decode(&value);
-  value &= 0x3f;
   value_in[1] >>= 4;
   if (value != value_in[1]) { state->debug_header_errors++; }
   value_out <<= 6;
@@ -555,7 +538,6 @@ read_and_correct_hex_word (dsd_opts* opts, dsd_state* state, int* status_count)
 
   value = value_in[2];
   p25_hamming10_6_4_decode(&value);
-  value &= 0x3f;
   value_in[2] >>= 4;
   if (value != value_in[2]) { state->debug_header_errors++; }
   value_out <<= 6;
@@ -563,7 +545,6 @@ read_and_correct_hex_word (dsd_opts* opts, dsd_state* state, int* status_count)
 
   value = value_in[3];
   p25_hamming10_6_4_decode(&value);
-  value &= 0x3f;
   value_in[3] >>= 4;
   if (value != value_in[3]) { state->debug_header_errors++; }
   value_out <<= 6;
@@ -597,7 +578,7 @@ decode_lcf(dsd_state* state, unsigned char lcformat, unsigned int hexdata[3])
     printf ("LCW: Unit-to-Unit Voice Ch Update, from %u to %u\n", radio_id, talkgroup);
   } else if (lcformat == 4) {
     channel = (((talkgroup & 0x0f) << 16) | (radio_id >> 16));
-    printf ("LCW: Group Voice Ch Update (Explicit), Group Address: 0x%04x, TX Channel: 0x%02x/0x%06x, RX Channel: 0x%02x/0x%06x\n",
+    printf ("LCW: Group Voice Ch Update (Explicit), Group Address: 0x%04x, TX Channel: 0x%02x/0x%06x, RX Channel: 0x%02x/0x%06x",
             (talkgroup >> 8), ((talkgroup >> 4) & 0x0f), channel, ((radio_id >> 12) & 0x0f), (radio_id & 0x0fff));
   } else if (lcformat == 5) {
     printf ("LCW: Unit-to-Unit Answer Request, from %u to %u\n", radio_id, talkgroup);
@@ -659,8 +640,8 @@ decode_lcf(dsd_state* state, unsigned char lcformat, unsigned int hexdata[3])
             ((radio_id & 0x40) ? 'R' : ' '), ((radio_id & 0x80) ? 'V' : ' '));
   } else if ((lcformat == 34) || (lcformat == 35) || (lcformat == 39) || (lcformat == 40)) {
     unsigned char cctype2 = ((radio_id & 0x01) ? 'C' : ((radio_id & 0x02) ? 'U' : 'B')); 
-    printf ("LCW: RFSS or Adjacent Site Broadcast%s: Location Registration Area: 0x%02x, System: 0x%03x, "
-            "Site: RFSSId: 0x%02x, SiteId: 0x%02x, Channel: 0x%02x/0x%06x ControlChannel(%c): %c%c%c%c\n",
+    printf ("LCW: RFSS or Adjacent Site Broadcast%s: Location Registration Area: 0x%02x, System: 0x%03x,"
+            "     Site: RFSSId: 0x%02x, SiteId: 0x%02x, Channel: 0x%02x/0x%06x ControlChannel(%c): %c%c%c%c\n",
             ((lcformat > 35) ? " (Explicit) " : ""), ((hexdata[0] >> 8) & 0xff),
             (((hexdata[0] & 0x0f) << 8) | (talkgroup >> 16)),
             ((talkgroup >> 8) & 0xff), ((talkgroup >> 0) & 0xff), (radio_id >> 20),
@@ -681,7 +662,7 @@ decode_lcf(dsd_state* state, unsigned char lcformat, unsigned int hexdata[3])
             ((radio_id >> 12) & 0x0f), (radio_id & 0x0fff),
             ((talkgroup >> 4) & 0x0f), (((talkgroup & 0x0f) << 8) | (radio_id >> 16)));
   } else  {
-    printf ("LCW: Unknown (lcformat: 0x%02x), hexdump: 0x%06x, 0x%06x, 0x%06x\n",
+    printf ("LCW: Unknown (lcformat: 0x%02x), hexdump: 0x%04x, 0x%06x, 0x%06x\n",
             lcformat, hexdata[0], hexdata[1], hexdata[2]);
   }
 }
@@ -778,12 +759,14 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   state->talkgroup = ((hex_data[1] << 8) | (hex_data[2] >> 24));
   state->radio_id = (hex_data[2] & 0x00ffffff);
 
-  lcformat  = ((hex_data[0] >> 16) & 0x3F);
+  lcformat  = (hex_data[0] & 0xFF);
   mfid  = ((hex_data[0] >> 8) & 0xFF);
   if (opts->errorbars == 1) {
-      printf ("LDU1: e: %u, talkgroup: %u, src: %u, mfid: %s (%u), lcformat: 0x%02x, lsd1: 0x%02x, lsd2: 0x%02x\n",
-              state->errs2, state->talkgroup, state->radio_id, mfids[mfid_mapping[mfid&0x3f]], mfid, lcformat, lsd1, lsd2);
-      decode_lcf(state, lcformat, hex_data);
+      hex_data[0] >>= 8;
+      printf ("LDU1: e: %u, talkgroup: %u, src: %u, mfid: %s (%u), lcformat: 0x%02x, lcinfo: 0x%02x 0x%06x 0x%06x\n",
+              state->errs2, state->talkgroup, state->radio_id, mfids[mfid_mapping[mfid&0x3f]], mfid, lcformat,
+              (hex_data[0] >> 8), hex_data[1], hex_data[2]);
+      decode_lcf(state, lcformat>>2, hex_data);
   }
 }
 
@@ -873,8 +856,8 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   getDibit (opts, state);
 
   if (opts->errorbars == 1) {
-    printf ("LDU2: e: %u, lsd1: 0x%02x, lsd2: 0x%02x\n",
-            state->errs2, lsd1, lsd2);
+    printf ("LDU2: e: %u, talkgroup: %u, src: %u lsd1: 0x%02x, lsd2: 0x%02x\n",
+            state->errs2, state->talkgroup, state->radio_id, lsd1, lsd2);
   }
 }
 
@@ -915,7 +898,7 @@ processTDULC (dsd_opts* opts, dsd_state* state)
   unsigned char hex_and_parity[12];
   unsigned char lcformat = 0, mfid = 0;
   unsigned int lcinfo[3];
-  unsigned int dodeca_data[6];    // Data in 12-bit words. A total of 6 words.
+  unsigned char dodeca_data[6][12];    // Data in 12-bit words. A total of 6 words.
   int status_count;
 
   // we skip the status dibits that occur every 36 symbols
@@ -932,7 +915,9 @@ processTDULC (dsd_opts* opts, dsd_state* state)
 
       // codeword is now hopefully fixed
       // put it back into our hex format
-      dodeca_data[5-j] = corrected_hexword;
+      for (i = 0; i < 12; i++) {
+          dodeca_data[5-j][i] = ((corrected_hexword >> (11 - i)) & 1);
+      }
   }
 
   skip_dibit(opts, state, 72, &status_count);
@@ -949,19 +934,18 @@ processTDULC (dsd_opts* opts, dsd_state* state)
   getDibit (opts, state);
 
   // Put the corrected data into the DSD structures
-  lcinfo[0]  = (dodeca_data[5] << 12);
-  lcinfo[0] |= (dodeca_data[4]);
-  lcinfo[1]  = (dodeca_data[3] << 12);
-  lcinfo[1] |= (dodeca_data[2]);
-  lcinfo[2]  = (dodeca_data[1] << 12);
-  lcinfo[2] |= (dodeca_data[0]);
+  lcformat = get_uint(dodeca_data[5], 8);
+  mfid  = ((get_uint(dodeca_data[5]+8, 4) << 4) | (get_uint(dodeca_data[4], 4) << 0));
 
-  lcformat = (lcinfo[0] >> 16);
-  mfid  = (lcinfo[0] >> 8);
+  lcinfo[0] = ((mfid << 8) | get_uint(dodeca_data[4]+4, 8));
+  lcinfo[1]  = (get_uint(dodeca_data[3], 12) << 12);
+  lcinfo[1] |= (get_uint(dodeca_data[2], 12));
+  lcinfo[2]  = (get_uint(dodeca_data[1], 12) << 12);
+  lcinfo[2] |= (get_uint(dodeca_data[0], 12));
 
   if (opts->errorbars == 1) {
-      printf ("TDULC: mfid: %s (%u), lcformat: 0x%02x\n", mfids[mfid_mapping[mfid&0x3f]], mfid, lcformat);
-      decode_lcf(state, (lcformat & 0x3f), lcinfo);
+      printf ("mfid: %u, lcformat: 0x%02x, lcinfo: 0x%03x 0x%03x 0x%03x\n", mfid, lcformat, lcinfo[0], lcinfo[1], lcinfo[2]);
+      decode_lcf(state, lcformat>>2, lcinfo);
   }
 }
 
@@ -989,7 +973,7 @@ unsigned int trellis_1_2_decode(uint8_t *in, uint32_t in_sz, uint8_t *out)
    };
 
    // perform trellis decoding
-   //in_sz--;
+   in_sz--;
    for(i = 0; i < in_sz; ++i) {
       uint8_t codeword = (in[i] & 0x0f);
       // find dibit with minimum Hamming distance
@@ -1008,8 +992,7 @@ unsigned int trellis_1_2_decode(uint8_t *in, uint32_t in_sz, uint8_t *out)
          }
       }
       if(m != 1) {
-        printf("Trellis_1_2_decode: decoding error at offset %u (codeword: 0x%x, m: %u, hd: %u, ns: %u)\n",
-               i, codeword, m, hd, ns);
+        printf("Error: decoding error at offset %u\n", i);
         return 0;
       }
       state = ns;
@@ -1037,10 +1020,12 @@ static const size_t INTERLEAVING[] = {
 };
 
 static void
-processTSBK(dsd_opts* opts, dsd_state* state, unsigned char raw_dibits[98], unsigned char out[12])
+processTSBK(dsd_opts* opts, dsd_state* state, unsigned char raw_dibits[98], unsigned char out[12], int *status_count)
 {
   unsigned char trellis_buffer[49];
   unsigned int i;
+
+  read_dibit(opts, state, raw_dibits, 98, status_count);
 
   for (i = 0; i < 49; i++) {
     unsigned int k = INTERLEAVING[i];
@@ -1066,24 +1051,17 @@ processTSDU(dsd_opts* opts, dsd_state* state)
   int status_count;
   unsigned char raw_dibits[98];
   unsigned char out[12];
-  unsigned int i = 0;
 
   // we skip the status dibits that occur every 36 symbols
   // the next status symbol comes in 14 dibits from here
   // so we start counter at 36-14-1 = 21
   status_count = 21;
 
-  while (!last_block && (i < 3)) {
-    read_dibit(opts, state, raw_dibits, 98, &status_count);
-    processTSBK(opts, state, raw_dibits, out);
+  while (!last_block) {
+    processTSBK(opts, state, raw_dibits, out, &status_count);
     last_block = (out[0] >> 7);
     opcode = (out[0] & 0x3f);
-    i++;
     printf("TSDU: lb: %u, opcode: 0x%02x, mfid: 0x%02x\n", last_block, opcode, out[1]);
-  }
-
-  if (status_count == 35) {
-    getDibit (opts, state);
   }
 }
 
