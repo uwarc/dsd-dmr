@@ -140,11 +140,8 @@ processFrame (dsd_opts * opts, dsd_state * state)
   if (synctype == 8) {
       processNXDNData (opts, state);
       return;
-  } else if (synctype == 5) {
+  } else if ((synctype == 5) || (synctype == 1)) {
       processDMRdata (opts, state);
-      return;
-  } else if (synctype == 1) {
-      processX2TDMAData (opts, state);
       return;
   }
 
@@ -153,9 +150,9 @@ processFrame (dsd_opts * opts, dsd_state * state)
       printf ("Sync: %s mod: %s offs: %u      inlvl: %2i%% p25 NAC: 0x%03x, DUID: 0x%x -> %s\n",
               state->ftype, ((state->rf_mod == 2) ? "GFSK" : "QPSK"), state->offset, level,
               state->nac, state->duid, p25frametypes[state->duid]);
-      //if (ret) {
+      if (ret) {
         process_p25_frame (opts, state);
-      //}
+      }
       return;
   }
 
