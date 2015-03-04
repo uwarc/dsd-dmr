@@ -319,7 +319,8 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
       }
 
       if (state->lastsynctype != -1) {
-          if (synctest_pos >= 1800) {
+          //if (synctest_pos >= 1800) {
+          if (synctest_pos >= 9000) {
               if (state->lastsynctype != -1) {
                   printf ("Sync: no sync\n");
               }
