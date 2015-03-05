@@ -156,7 +156,6 @@ typedef struct
   ReedSolomon ReedSolomon_12_09_04;
 
   ReedSolomon ReedSolomon_24_12_13;
-  ReedSolomon ReedSolomon_24_16_09;
   ReedSolomon ReedSolomon_36_20_17;
 } dsd_state;
 
@@ -253,9 +252,9 @@ int getSymbol (dsd_opts * opts, dsd_state * state, int have_sync);
 void processEmb (dsd_state *state, unsigned char lcss, unsigned char emb_fr[4][32]);
 void processDMRdata (dsd_opts * opts, dsd_state * state);
 void processNXDNData (dsd_opts * opts, dsd_state * state);
-void processX2TDMAData (dsd_opts * opts, dsd_state * state);
 unsigned int processDMRvoice (dsd_opts * opts, dsd_state * state);
 unsigned int processNXDNVoice (dsd_opts * opts, dsd_state * state);
+unsigned int processX2TDMAvoice (dsd_opts * opts, dsd_state * state);
 unsigned int processDSTAR (dsd_opts * opts, dsd_state * state);
 unsigned int processDSTAR_HD (dsd_opts * opts, dsd_state * state);
 void process_p25_frame(dsd_opts *opts, dsd_state *state);
@@ -266,8 +265,6 @@ unsigned int dsd_div32(unsigned int num, unsigned int den, unsigned int *rem);
 
 void ReedSolomon_36_20_17_encode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* out_hex_parity);
 int ReedSolomon_36_20_17_decode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* hex_parity);
-void ReedSolomon_24_16_09_encode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* out_hex_parity);
-int ReedSolomon_24_16_09_decode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* hex_parity);
 void ReedSolomon_24_12_13_encode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* out_hex_parity);
 int ReedSolomon_24_12_13_decode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* hex_parity);
 
