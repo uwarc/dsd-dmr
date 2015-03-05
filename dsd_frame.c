@@ -87,7 +87,6 @@ get_p25_nac_and_duid(dsd_opts *opts, dsd_state *state)
   dibit = getDibit (opts, state);
   bch_code <<= 1;
   bch_code |= (dibit >> 1);      // bit 1
-  //parity = (dibit & 1);     // bit 0
   bch_code <<= 1;
 
   // Check if the NID is correct
@@ -110,18 +109,10 @@ get_p25_nac_and_duid(dsd_opts *opts, dsd_state *state)
           duid = new_duid;
           state->debug_header_errors++;
       }
-#if 0
-      // Check the parity
-      if (parity_table[new_duid] != parity) {
-          //printf("Error in parity detected?");
-      }
-#endif
   } else {
       // Check of NID failed and unable to recover its value
-      printf("NID error\n");
-      printf("old_nac: 0x%03x -> nac: 0x%03x\n", nac, (new_nac >> 4));
-      printf("old_duid: 0x%x -> duid: 0x%x\n", duid, (new_nac & 0x0F));
-      //state->debug_header_critical_errors++;
+      printf("p25: Unable to correct errors in NAC/DUID: 0x%03x/0x%x (attempted correction: 0x%03x/0x%x)\n",
+             nac, duid, (new_nac >> 4), (new_nac & 0x0F));
   }
   state->nac = nac;
   state->duid = duid;
@@ -168,10 +159,8 @@ processFrame (dsd_opts * opts, dsd_state * state)
       total_errs = processDSTAR_HD (opts, state);
   } else if (synctype == 6) {
       total_errs = processDMRvoice (opts, state);
-#if 0
   } else if (synctype == 2) {
       processX2TDMAvoice (opts, state);
-#endif
   }
   printf ("Sync: %s mod: GFSK      inlvl: %2i%% %s %s  VOICE e: %u\n",
           state->ftype, level, state->slot0light, state->slot1light, total_errs);
