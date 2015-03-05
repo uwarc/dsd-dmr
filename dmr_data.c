@@ -101,12 +101,7 @@ static char *csbk_ids[] = {
     "???", // 44
     "???", // 45
     "Clear", // 46
-    "Protect", // 47
-    "Private Voice Grant", // 48
-    "Talkgroup Voice Grant", // 49
-    "Private Broadcast Voice Grant", // 50
-    "Private Data Grant", // 51
-    "Talkgroup Data Grant" // 52
+    "Protect" // 47
 };
 
 static unsigned char TrellisDibitDeinterleave[49] = 
@@ -232,21 +227,25 @@ static unsigned int processFlco(dsd_state *state, unsigned char payload[97], cha
     l = get_uint(payload+16, 8);
     state->talkgroup = get_uint(payload+24, 24);
     state->radio_id = get_uint(payload+48, 24);
-    k = snprintf(flcostr, 1023, "Msg: Group Voice Ch Usr, SvcOpts: %u, Talkgroup: %u, RadioId: %u", l, state->talkgroup, state->radio_id);
+    k = snprintf(flcostr, 1023, "Msg: Group Voice Ch Usr, SvcOpts: %u, Talkgroup: %u, RadioId: %u",
+                 l, state->talkgroup, state->radio_id);
   } else if (flco == 3) {
     state->talkgroup = get_uint(payload+24, 24);
     state->radio_id = get_uint(payload+48, 24);
-    k = snprintf(flcostr, 1023, "Msg: Unit-Unit Voice Ch Usr, Talkgroup: %u, RadioId: %u", state->talkgroup, state->radio_id);
+    k = snprintf(flcostr, 1023, "Msg: Unit-Unit Voice Ch Usr, Talkgroup: %u, RadioId: %u",
+                 state->talkgroup, state->radio_id);
   } else if (flco == 4) { 
     state->talkgroup = get_uint(payload+24, 24);
     l = get_uint(payload+48, 24);
     state->radio_id = get_uint(payload+56, 24);
-    k = snprintf(flcostr, 1023, "Msg: Capacity+ Group Voice, Talkgroup: %u, RestCh: %u, RadioId: %u", state->talkgroup, l, state->radio_id);
+    k = snprintf(flcostr, 1023, "Msg: Capacity+ Group Voice, Talkgroup: %u, RestCh: %u, RadioId: %u",
+                 state->talkgroup, l, state->radio_id);
   } else if (flco == 48) {
     lasttg = get_uint(payload+16, 24);
     radio_id = get_uint(payload+40, 24);
     l = ((payload[69] << 2) | (payload[70] << 1) | (payload[71] << 0));
-    k = snprintf(flcostr, 1023, "Msg: Terminator Data LC, Talkgroup: %u, RadioId: %u, N(s): %u", lasttg, radio_id, l);
+    k = snprintf(flcostr, 1023, "Msg: Terminator Data LC, Talkgroup: %u, RadioId: %u, N(s): %u",
+                 lasttg, radio_id, l);
   } else { 
     k = snprintf(flcostr, 1023, "Unknown Standard/Capacity+ FLCO: flco: 0x%x, packet_dump: ", flco);
     for (i = 2; i < 12; i++) {
