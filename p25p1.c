@@ -1,16 +1,6 @@
 #include "dsd.h"
 #include "p25p1_const.h"
 
-#if 0
-static unsigned char mfids[36] = {
-    0x00, 0x01, 0x02, 0x04, 0x06, 0x08, 0x0a, 0x0c,
-    0x0d, 0x0e, 0x10, 0x12, 0x14, 0x15, 0x16, 0x18,
-    0x19, 0x1a, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21,
-    0x24, 0x28, 0x29, 0x2c, 0x30, 0x32, 0x34, 0x36,
-    0x38, 0x3c, 0x3e, 0x3f
-};
-#endif
-
 static unsigned char mfid_mapping[64] = {
      0,  1,  2, 0,  3,  0,  4, 0,
      5,  0,  6, 0,  7,  8,  9, 0,
@@ -140,6 +130,64 @@ void p25_hamming15_11_3_decode(unsigned int *codeword)
   *codeword = (block >> 4);
 }
 
+static unsigned int Cyclic1685Gen[8] = {
+    0x804e, 0x4027, 0x208f, 0x10db, 0x08f1, 0x04e4, 0x0272, 0x0139
+};
+
+void p25_lsd_cyclic1685_decode(unsigned int *codeword)
+{
+  unsigned int i, block = *codeword, ecc = 0, syndrome;
+  for(i = 0; i < 8; i++) {
+      if((block & Cyclic1685Gen[i]) > 0xff)
+          ecc ^= Cyclic1685Gen[i];
+  }
+  syndrome = ecc ^ block;
+  if (syndrome > 0) {
+      block ^= (1U << (syndrome - 1));
+  }
+  *codeword = (block >> 8);
+}
+
+void
+read_dibit (dsd_opts* opts, dsd_state* state, unsigned char* output, unsigned int count, int* status_count)
+{
+    unsigned int i;
+
+    for (i = 0; i < count; i++) {
+        if (*status_count == 35) {
+            // Status bits now
+            // TODO: do something useful with the status bits...
+            //int status = getDibit (opts, state);
+            getDibit (opts, state);
+            *status_count = 1;
+        } else {
+            (*status_count)++;
+        }
+
+        output[i] = getDibit(opts, state);
+    }
+}
+
+void
+skip_dibit(dsd_opts* opts, dsd_state* state, unsigned int count, int* status_count)
+{
+    unsigned int i;
+
+    for (i = 0; i < count; i++) {
+        if (*status_count == 35) {
+            // Status bits now
+            // TODO: do something useful with the status bits...
+            //int status = getDibit (opts, state);
+            getDibit (opts, state);
+            *status_count = 1;
+        } else {
+            (*status_count)++;
+        }
+
+        getDibit(opts, state);
+    }
+}
+
 static unsigned int mbe_golay2312 (unsigned int in, unsigned int *out)
 {
   unsigned int i, errs = 0, block = in;
@@ -195,21 +243,19 @@ static int mbe_eccImbe7200x4400Data (char imbe_fr[8][23], char *imbe_d)
   unsigned int hin, gin, gout, block;
   char *imbe = imbe_d;
 
-  for (i = 0; i < 4; i++) {
-      if (i > 0) {
-          gin = 0;
-          for (j = 22; j >= 0; j--) {
-              gin <<= 1;
-              gin |= imbe_fr[i][j];
-          }
-          errs += mbe_golay2312 (gin, &gout);
-          for (j = 0; j < 12; j++) {
-            *imbe++ = ((gout >> j) & 1);
-          }
-      } else {
-          for (j = 11; j >= 0; j--) {
-              *imbe++ = imbe_fr[i][j+11];
-          }
+  for (j = 11; j >= 0; j--) {
+    *imbe++ = imbe_fr[0][j+11];
+  }
+
+  for (i = 1; i < 4; i++) {
+      gin = 0;
+      for (j = 22; j >= 0; j--) {
+          gin <<= 1;
+          gin |= imbe_fr[i][j];
+      }
+      errs += mbe_golay2312 (gin, &gout);
+      for (j = 0; j < 12; j++) {
+          *imbe++ = ((gout >> j) & 1);
       }
   }
   for (i = 4; i < 7; i++) {
@@ -233,22 +279,11 @@ static int mbe_eccImbe7200x4400Data (char imbe_fr[8][23], char *imbe_d)
   return (errs);
 }
 
-unsigned int demodImbe7200x4400 (char imbe_fr[8][23], char imbe_d[88])
-{
-    unsigned int i, errs2 = 0;
-    for (i = 0; i < 88; i++) {
-        imbe_d[i] = 0;
-    }
-    //errs2 = mbe_eccImbe7200x4400C0 (imbe_fr[0]);
-    mbe_demodulateImbe7200x4400Data (imbe_fr);
-    errs2 += mbe_eccImbe7200x4400Data (imbe_fr, imbe_d);
-    return errs2;
-}
-
 void
 process_IMBE (dsd_opts* opts, dsd_state* state, int* status_count)
 {
-  int j, dibit;
+  unsigned int i, dibit;
+  unsigned char imbe_dibits[72];
   char imbe_fr[8][23];
   const int *w, *x, *y, *z;
 
@@ -257,99 +292,47 @@ process_IMBE (dsd_opts* opts, dsd_state* state, int* status_count)
   y = iY;
   z = iZ;
 
-  for (j = 0; j < 72; j++)
-    {
-      if (*status_count == 35)
-        {
-          // Skip the status symbol
-          //int status = getDibit (opts, state);
-          getDibit (opts, state);
-          // TODO: do something useful with the status bits...
-          *status_count = 1;
-        }
-      else
-        {
-          (*status_count)++;
-        }
-      dibit = getDibit (opts, state);
+  read_dibit(opts, state, imbe_dibits, 72, status_count);
+
+  for (i = 0; i < 72; i++) {
+      dibit = imbe_dibits[i];
       imbe_fr[*w][*x] = (1 & (dibit >> 1)); // bit 1
       imbe_fr[*y][*z] = (1 & dibit);        // bit 0
       w++;
       x++;
       y++;
       z++;
+  }
+
+  //if (state->p25kid == 0)
+  {
+    // Check for a non-standard c0 transmitted. This is explained here: https://github.com/szechyjs/dsd/issues/24
+    unsigned int nsw = 0x00038000;
+    unsigned int gin = 0, gout;
+    int j;
+    for (j = 22; j >= 0; j--) {
+        gin <<= 1;
+        gin |= imbe_fr[0][j];
     }
 
-  //if (state->p25kid == 0 || opts->unmute_encrypted_p25 == 1)
-    {
-      {
-          // Check for a non-standard c0 transmitted
-          // This is explained here: https://github.com/szechyjs/dsd/issues/24
-
-          //unsigned char non_standard_word[23] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0};
-          unsigned int nsw = 0x00038000;
-          unsigned int gin = 0, gout;
-          int j;
-          for (j = 22; j >= 0; j--) {
-            gin <<= 1;
-            gin |= imbe_fr[0][j];
-          }
-
-          if (gin == nsw) {
-              // Skip this particular value. If we let it pass it will be signaled as an erroneus IMBE
-              printf("(Non-standard IMBE c0 detected, skipped)\n");
-          } else {
-              char imbe_d[88];
-              state->errs2 = mbe_golay2312 (gin, &gout);
-              for (j = 11; j >= 0; j--) {
-                imbe_fr[0][j+11] = (gout & 0x0800) >> 11;
-                gout <<= 1;
-              }
-              state->errs2 += demodImbe7200x4400 (imbe_fr, imbe_d);
-              processIMBEFrame (opts, state, imbe_d);
-          }
-      }
-    }
-}
-
-void
-read_dibit (dsd_opts* opts, dsd_state* state, unsigned char* output, unsigned int count, int* status_count)
-{
-    unsigned int i;
-
-    for (i = 0; i < count; i++) {
-        if (*status_count == 35) {
-            // Status bits now
-            // TODO: do something useful with the status bits...
-            //int status = getDibit (opts, state);
-            getDibit (opts, state);
-            *status_count = 1;
-        } else {
-            (*status_count)++;
+    if (gin == nsw) {
+        // Skip this particular value. If we let it pass it will be signaled as an erroneus IMBE
+        printf("(Non-standard IMBE c0 detected, skipped)\n");
+    } else {
+        char imbe_d[88];
+        state->errs2 = mbe_golay2312 (gin, &gout);
+        for (j = 11; j >= 0; j--) {
+            imbe_fr[0][j+11] = (gout & 0x0800) >> 11;
+            gout <<= 1;
         }
-
-        output[i] = getDibit(opts, state);
-    }
-}
-
-void
-skip_dibit(dsd_opts* opts, dsd_state* state, unsigned int count, int* status_count)
-{
-    unsigned int i;
-
-    for (i = 0; i < count; i++) {
-        if (*status_count == 35) {
-            // Status bits now
-            // TODO: do something useful with the status bits...
-            //int status = getDibit (opts, state);
-            getDibit (opts, state);
-            *status_count = 1;
-        } else {
-            (*status_count)++;
+        for (j = 0; j < 88; j++) {
+            imbe_d[j] = 0;
         }
-
-        getDibit(opts, state);
+        mbe_demodulateImbe7200x4400Data (imbe_fr);
+        state->errs2 += mbe_eccImbe7200x4400Data (imbe_fr, imbe_d);
+        processIMBEFrame (opts, state, imbe_d);
     }
+  }
 }
 
 /**
@@ -378,36 +361,6 @@ correct_hex_word (dsd_state* state, unsigned char *hex_and_parity, unsigned int 
 
   state->debug_header_errors += fixed_errors;
   return golay_codeword;
-}
-
-static inline void hex_to_bin(unsigned char *output, unsigned int input)
-{
-  output[0] = ((input >> 5) & 1);
-  output[1] = ((input >> 4) & 1);
-  output[2] = ((input >> 3) & 1);
-  output[3] = ((input >> 2) & 1);
-  output[4] = ((input >> 1) & 1);
-  output[5] = ((input >> 0) & 1);
-}
-
-/**
- * Reads an hex word, its parity bits and attempts to error correct it using the Golay23 algorithm.
- */
-static void
-read_and_correct_hdu_hex_word (dsd_opts* opts, dsd_state* state, unsigned char* hex, int* status_count)
-{
-  unsigned int corrected_hexword = 0;
-  unsigned char hex_and_parity[18];
-
-  // read both the hex word and the Golay(23, 12) parity information
-  read_dibit(opts, state, hex_and_parity, 9, status_count);
-
-  // Use the Golay23 FEC to correct it.
-  corrected_hexword = correct_hex_word(state, hex_and_parity, 9);
-
-  // codeword is now hopefully fixed
-  // put it back into our hex format
-  hex_to_bin(hex, corrected_hexword);
 }
 
 void update_p25_error_stats (dsd_state* state, unsigned int nbits, unsigned int n_errs)
@@ -440,7 +393,8 @@ processHDU(dsd_opts* opts, dsd_state* state)
   unsigned char algid = 0;
   unsigned int talkgroup = 0;
   int status_count;
-  unsigned char hex_data[20][6];    // Data in hex-words (6 bit words). A total of 20 hex words.
+  unsigned char hex_and_parity[18];
+  unsigned char hex_data[20];    // Data in hex-words (6 bit words). A total of 20 hex words.
 
   // we skip the status dibits that occur every 36 symbols
   // the next status symbol comes in 14 dibits from here
@@ -448,56 +402,34 @@ processHDU(dsd_opts* opts, dsd_state* state)
   status_count = 21;
 
   // Read 20 hex words, correct them using their Golay23 parity data.
-  //for (i=19; i>=0; i--) {
   for (i = 0; i < 20; i++) {
-      read_and_correct_hdu_hex_word (opts, state, hex_data[i], &status_count);
+      // read both the hex word and the Golay(23, 12) parity information
+      read_dibit(opts, state, hex_and_parity, 9, &status_count);
+      // Use the Golay23 FEC to correct it.
+      hex_data[i] = correct_hex_word(state, hex_and_parity, 9);
   }
 
   // Skip the 16 parity hex word.
   skip_dibit(opts, state, 9*16, &status_count);
 
   // Now put the corrected data on the DSD structures
-  mfid = get_uint(hex_data[12], 6);
-  mfid <<= 2;
-  mfid |= ((hex_data[13][1] << 1) | (hex_data[13][0] << 0));
+  mfid = ((hex_data[12] << 2) | (hex_data[13] & 3));
 
   // The important algorithm ID. This indicates whether the data is encrypted,
   // and if so what is the encryption algorithm used.
   // A code 0x80 here means that the data is unencrypted.
-  algid  = (get_uint(hex_data[13]+2, 4) << 4);
-  algid |= (get_uint(hex_data[14], 4) << 0);
+  algid  = (((hex_data[13] >> 2) << 4) | (hex_data[14] & 0x0f));
 
   skipDibit (opts, state, 6);
 
   if ((mfid == 144) || (mfid == 9)) { // FIXME: only one of these is correct.
-    talkgroup  = (get_uint(hex_data[18], 6) << 6);
-    talkgroup |= get_uint(hex_data[19], 6);
+    talkgroup  = ((hex_data[18] << 6) | hex_data[19]);
   } else {
-    talkgroup  = (get_uint(hex_data[17]+2, 4) << 12);
-    talkgroup |= (get_uint(hex_data[18], 6) << 6);
-    talkgroup |= get_uint(hex_data[19], 6);
+    talkgroup  = (((hex_data[17] >> 2) << 12) | (hex_data[18] << 6) | (hex_data[19]));
   }
 
   state->talkgroup = talkgroup;
   printf ("mfid: %s (%u) talkgroup: %u\n", mfids[mfid_mapping[mfid&0x3f]], mfid, talkgroup);
-}
-
-static unsigned int Cyclic1685Gen[8] = {
-    0x804e, 0x4027, 0x208f, 0x10db, 0x08f1, 0x04e4, 0x0272, 0x0139
-};
-
-void p25_lsd_cyclic1685_decode(unsigned int *codeword)
-{
-  unsigned int i, block = *codeword, ecc = 0, syndrome;
-  for(i = 0; i < 8; i++) {
-      if((block & Cyclic1685Gen[i]) > 0xff)
-          ecc ^= Cyclic1685Gen[i];
-  }
-  syndrome = ecc ^ block;
-  if (syndrome > 0) {
-      block ^= (1U << (syndrome - 1));
-  }
-  *codeword = (block >> 8);
 }
 
 unsigned int
@@ -555,7 +487,7 @@ read_and_correct_hex_word (dsd_opts* opts, dsd_state* state, int* status_count)
 
 void decode_lcf(dsd_state* state, unsigned int hexdata[3])
 {
-  unsigned char lcformat = ((lcinfo[0] & 0xFF) >> 2);
+  unsigned char lcformat = ((hexdata[0] & 0xFF) >> 2);
   unsigned int talkgroup = (((hexdata[1] << 8) & 0x00ffffff) | (hexdata[2] >> 24));
   unsigned int radio_id = (hexdata[2] & 0x00ffffff);
   unsigned int channel = 0;
@@ -672,11 +604,10 @@ static void
 processLDU1 (dsd_opts* opts, dsd_state* state)
 {
   // extracts IMBE frames from LDU frame
-  int i;
   unsigned char mfid = 0, lcformat = 0;
-  unsigned int lsd1 = 0, lsd2 = 0;
-  //unsigned char hex_data[12][6];    // Data in hex-words (6 bit words). A total of 12 hex words.
+  unsigned int i, lsd1 = 0, lsd2 = 0;
   unsigned int hex_data[3];    // Data in hex-words (6 bit words), stored packed in groups of four, in a uint32_t
+  unsigned char lsd[16];
   int status_count;
 
   // we skip the status dibits that occur every 36 symbols
@@ -727,29 +658,19 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 8: LSD (low speed data)
-  {
-    unsigned char lsd[8];
+  read_dibit(opts, state, lsd, 16, &status_count);
 
-    read_dibit(opts, state, lsd, 8, &status_count);
-
-    for (i=0; i<8; i++) {
-      lsd1 <<= 2;
-      lsd1 |= lsd[i];
-    }
-
-    read_dibit(opts, state, lsd, 8, &status_count);
-
-    for (i=0; i<8; i++) {
-      lsd2 <<= 2;
-      lsd2 |= lsd[i];
-    }
-
-    p25_lsd_cyclic1685_decode(&lsd1);
-    p25_lsd_cyclic1685_decode(&lsd2);
-    printf ("lsd1: 0x%02x, lsd2: 0x%02x\n", lsd1, lsd2);
-
-    // TODO: do something useful with the LSD bytes...
+  for (i=0; i<8; i++) {
+    lsd1 <<= 2;
+    lsd1 |= lsd[i];
+    lsd2 <<= 2;
+    lsd2 |= lsd[i+8];
   }
+
+  p25_lsd_cyclic1685_decode(&lsd1);
+  p25_lsd_cyclic1685_decode(&lsd2);
+  printf ("lsd1: 0x%02x, lsd2: 0x%02x\n", lsd1, lsd2);
+  // TODO: do something useful with the LSD bytes...
 
   // IMBE 9
   process_IMBE (opts, state, &status_count);
@@ -774,8 +695,8 @@ static void
 processLDU2 (dsd_opts * opts, dsd_state * state)
 {
   // extracts IMBE frames from LDU frame
-  int i;
-  unsigned int lsd1 = 0, lsd2 = 0;
+  unsigned char lsd[16];
+  unsigned int i, lsd1 = 0, lsd2 = 0;
   int status_count;
 
   // we skip the status dibits that occur every 36 symbols
@@ -826,28 +747,18 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 8: LSD (low speed data)
-  {
-    unsigned char lsd[8];
+  read_dibit(opts, state, lsd, 16, &status_count);
 
-    read_dibit(opts, state, lsd, 8, &status_count);
-
-    for (i=0; i<8; i++) {
-      lsd1 <<= 2;
-      lsd1 |= lsd[i];
-    }
-
-    read_dibit(opts, state, lsd, 8, &status_count);
-
-    for (i=0; i<8; i++) {
-      lsd2 <<= 2;
-      lsd2 |= lsd[i];
-    }
-
-    p25_lsd_cyclic1685_decode(&lsd1);
-    p25_lsd_cyclic1685_decode(&lsd2);
-
-    // TODO: do something useful with the LSD bytes...
+  for (i=0; i<8; i++) {
+    lsd1 <<= 2;
+    lsd1 |= lsd[i];
+    lsd2 <<= 2;
+    lsd2 |= lsd[i+8];
   }
+
+  p25_lsd_cyclic1685_decode(&lsd1);
+  p25_lsd_cyclic1685_decode(&lsd2);
+  // TODO: do something useful with the LSD bytes...
 
   // IMBE 9
   process_IMBE (opts, state, &status_count);
@@ -856,8 +767,8 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   getDibit (opts, state);
 
   if (opts->errorbars == 1) {
-    printf ("LDU2: e: %u, talkgroup: %u, src: %u lsd1: 0x%02x, lsd2: 0x%02x\n",
-            state->errs2, state->talkgroup, state->radio_id, lsd1, lsd2);
+    printf ("LDU2: e: %u, lsd1: 0x%02x, lsd2: 0x%02x\n",
+            state->errs2, lsd1, lsd2);
   }
 }
 
@@ -875,30 +786,14 @@ processTDU (dsd_opts* opts, dsd_state* state)
     getDibit (opts, state);
 }
 
-/**
- * Reverse the order of bits in a 12-bit word. We need this to accommodate to the expected bit order in
- * some algorithms.
- * \param dodeca The 12-bit word to reverse.
- */
-static inline void
-swap_hex_words_bits(unsigned char *dodeca)
-{
-  unsigned int j;
-  for(j=0; j<6; j++) {
-      unsigned char swap = dodeca[j];
-      dodeca[j] = dodeca[j+6];
-      dodeca[j+6] = swap;
-  }
-}
-
 static void
 processTDULC (dsd_opts* opts, dsd_state* state)
 {
-  unsigned int i, j, corrected_hexword = 0;
+  unsigned int j, corrected_hexword = 0;
   unsigned char hex_and_parity[12];
   unsigned char lcformat = 0, mfid = 0;
   unsigned int lcinfo[3];
-  unsigned char dodeca_data[6][12];    // Data in 12-bit words. A total of 6 words.
+  unsigned int dodeca_data[6];    // Data in 12-bit words. A total of 6 words.
   int status_count;
 
   // we skip the status dibits that occur every 36 symbols
@@ -915,9 +810,7 @@ processTDULC (dsd_opts* opts, dsd_state* state)
 
       // codeword is now hopefully fixed
       // put it back into our hex format
-      for (i = 0; i < 12; i++) {
-          dodeca_data[5-j][i] = ((corrected_hexword >> (11 - i)) & 1);
-      }
+      dodeca_data[5-j] = corrected_hexword;
   }
 
   skip_dibit(opts, state, 72, &status_count);
@@ -925,21 +818,16 @@ processTDULC (dsd_opts* opts, dsd_state* state)
   // Next 10 dibits should be zeros
   skip_dibit(opts, state, 10, &status_count);
 
-  // Next we should find an status dibit
-  if (status_count != 35) {
-      //printf("*** SYNC ERROR\n");
-  }
-
   // trailing status symbol
   getDibit (opts, state);
 
   // Put the corrected data into the DSD structures
-  lcinfo[0]  = (get_uint(dodeca_data[5], 12);
-  lcinfo[0] |= (get_uint(dodeca_data[4], 12) << 12);
-  lcinfo[1]  = (get_uint(dodeca_data[3], 12));
-  lcinfo[1] |= (get_uint(dodeca_data[2], 12) << 12);
-  lcinfo[2]  = (get_uint(dodeca_data[1], 12));
-  lcinfo[2] |= (get_uint(dodeca_data[0], 12) << 12);
+  lcinfo[0]  = (dodeca_data[5]);
+  lcinfo[0] |= (dodeca_data[4] << 12);
+  lcinfo[1]  = (dodeca_data[3]);
+  lcinfo[1] |= (dodeca_data[2] << 12);
+  lcinfo[2]  = (dodeca_data[1]);
+  lcinfo[2] |= (dodeca_data[0] << 12);
 
   lcformat  = (lcinfo[0] & 0xFF);
   mfid  = ((lcinfo[0] >> 8) & 0xFF);
@@ -950,7 +838,8 @@ processTDULC (dsd_opts* opts, dsd_state* state)
   }
 }
 
-unsigned int trellis_1_2_decode(uint8_t *in, uint32_t in_sz, uint8_t *out)
+static unsigned int
+trellis_1_2_decode(uint8_t *in, uint32_t in_sz, uint8_t *out)
 {
    uint8_t state = 0;
    unsigned int i, j;
@@ -1021,12 +910,10 @@ static const size_t INTERLEAVING[] = {
 };
 
 static void
-processTSBK(dsd_opts* opts, dsd_state* state, unsigned char raw_dibits[98], unsigned char out[12], int *status_count)
+processTSBK(unsigned char raw_dibits[98], unsigned char out[12], int *status_count)
 {
   unsigned char trellis_buffer[49];
   unsigned int i;
-
-  read_dibit(opts, state, raw_dibits, 98, status_count);
 
   for (i = 0; i < 49; i++) {
     unsigned int k = INTERLEAVING[i];
@@ -1049,9 +936,9 @@ static void
 processTSDU(dsd_opts* opts, dsd_state* state)
 {
   unsigned char last_block = 0, opcode = 0;
-  int status_count;
   unsigned char raw_dibits[98];
   unsigned char out[12];
+  int status_count;
 
   // we skip the status dibits that occur every 36 symbols
   // the next status symbol comes in 14 dibits from here
@@ -1059,18 +946,22 @@ processTSDU(dsd_opts* opts, dsd_state* state)
   status_count = 21;
 
   while (!last_block) {
-    processTSBK(opts, state, raw_dibits, out, &status_count);
+    read_dibit(opts, state, raw_dibits, 98, &status_count);
+    processTSBK(raw_dibits, out, &status_count);
     last_block = (out[0] >> 7);
     opcode = (out[0] & 0x3f);
     printf("TSDU: lb: %u, opcode: 0x%02x, mfid: 0x%02x\n", last_block, opcode, out[1]);
   }
+
+  // trailing status symbol
+  getDibit (opts, state);
 }
 
 void process_p25_frame(dsd_opts *opts, dsd_state *state)
 {
   unsigned char duid = state->duid;
 
-  if ((duid == 5) || ((duid == 10) && (state->lastp25type == 1)) || (duid == 12)) {
+  if ((duid == 5) || ((duid == 10) && (state->lastp25type == 1))) {
       if ((opts->mbe_out_dir[0] != 0) && (opts->mbe_out_fd == -1)) {
           state->errs2 = 0;
           openMbeOutFile (opts, state);
@@ -1084,7 +975,6 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state)
   } else if (duid == 5) { // 11 -> 0101 = 5
       // Logical Link Data Unit 1
       state->lastp25type = 1;
-      state->numtdulc = 0;
       processLDU1 (opts, state);
   } else if (duid == 10) { // 22 -> 1010 = 10
       // Logical Link Data Unit 2
@@ -1093,7 +983,6 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state)
           state->lastp25type = 0;
       } else {
           state->lastp25type = 2;
-          state->numtdulc = 0;
           processLDU2 (opts, state);
       }
   } else if ((duid == 3) || (duid == 15)) {
@@ -1109,17 +998,12 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state)
         processTDU (opts, state);
       } else {
         // Terminator with subsequent Link Control
-        state->numtdulc++;
         processTDULC (opts, state);
       }
   } else if (duid == 7) { // 13 -> 0111 = 7
       state->talkgroup = 0;
       state->lastp25type = 3;
-      // Now processing NID
       processTSDU (opts, state);
-      //skipDibit (opts, state, 328-25);
-  } else if (duid == 12) { // 30 -> 1100 = 12
-      state->lastp25type = 4;
   // try to guess based on previous frame if unknown type
   } else if (state->lastp25type == 1) { 
       if ((opts->mbe_out_dir[0] != 0) && (opts->mbe_out_fd == -1)) {
@@ -1128,7 +1012,6 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state)
       //state->lastp25type = 0;
       // Guess that the state is LDU2
       state->lastp25type = 2;
-      state->numtdulc = 0;
       printf("(LDU2)\n");
       processLDU2 (opts, state);
   } else if (state->lastp25type == 2) {
@@ -1138,19 +1021,15 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state)
       //state->lastp25type = 0;
       // Guess that the state is LDU1
       state->lastp25type = 1;
-      state->numtdulc = 0;
       printf("(LDU1)\n");
       processLDU1 (opts, state);
   } else if (state->lastp25type == 3) {
-      printf("(TSDU)\n");
       //state->lastp25type = 0;
       // Guess that the state is TSDU
       state->lastp25type = 3;
-      // Now processing NID
-      skipDibit (opts, state, 328-25);
-  } else if (state->lastp25type == 4) {
-      printf("(PDU)\n");
-      state->lastp25type = 0;
+      printf("(TSDU)\n");
+      processTSDU (opts, state);
+      //skipDibit (opts, state, 328-25);
   } else { 
       state->lastp25type = 0;
       printf ("Unknown DUID: 0x%x\n", duid);
