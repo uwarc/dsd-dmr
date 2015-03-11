@@ -54,7 +54,7 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
 {
   // extracts AMBE frames from X2TDMA frame
   int i, j, dibit;
-  int *dibit_p;
+  unsigned char *dibit_p;
   unsigned int total_errs = 0;
   char ambe_fr[4][24];
   char ambe_fr2[4][24];
