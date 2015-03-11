@@ -81,7 +81,6 @@ static unsigned int digitize (dsd_state* state, int symbol)
       if ((state->synctype & 1) == 1) { 
         dibit = invert_dibit(dibit);
       }
-      state->last_dibit = dibit;
       *state->dibit_buf_p++ = dibit;
       return dibit;
   }
