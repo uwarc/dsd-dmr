@@ -553,12 +553,13 @@ read_and_correct_hex_word (dsd_opts* opts, dsd_state* state, int* status_count)
   return value_out;
 }
 
-static void
-decode_lcf(dsd_state* state, unsigned char lcformat, unsigned int hexdata[3])
+void decode_lcf(dsd_state* state, unsigned int hexdata[3])
 {
+  unsigned char lcformat = ((lcinfo[0] & 0xFF) >> 2);
   unsigned int talkgroup = (((hexdata[1] << 8) & 0x00ffffff) | (hexdata[2] >> 24));
   unsigned int radio_id = (hexdata[2] & 0x00ffffff);
   unsigned int channel = 0;
+  hexdata[0] >>= 8;
   if (lcformat == 0) {
     printf ("LCW: Group Voice Ch User%s, talkgroup: %u, radio id: %u (session mode: %s)\n",
             ((hexdata[1] & 0x00800000) ? " Emergency" : ""),  (talkgroup & 0xffff), radio_id,
@@ -762,11 +763,10 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   lcformat  = (hex_data[0] & 0xFF);
   mfid  = ((hex_data[0] >> 8) & 0xFF);
   if (opts->errorbars == 1) {
-      hex_data[0] >>= 8;
       printf ("LDU1: e: %u, talkgroup: %u, src: %u, mfid: %s (%u), lcformat: 0x%02x, lcinfo: 0x%02x 0x%06x 0x%06x\n",
               state->errs2, state->talkgroup, state->radio_id, mfids[mfid_mapping[mfid&0x3f]], mfid, lcformat,
-              (hex_data[0] >> 8), hex_data[1], hex_data[2]);
-      decode_lcf(state, lcformat>>2, hex_data);
+              (hex_data[0] >> 16), hex_data[1], hex_data[2]);
+      decode_lcf(state, hex_data);
   }
 }
 
@@ -934,18 +934,19 @@ processTDULC (dsd_opts* opts, dsd_state* state)
   getDibit (opts, state);
 
   // Put the corrected data into the DSD structures
-  lcformat = get_uint(dodeca_data[5], 8);
-  mfid  = ((get_uint(dodeca_data[5]+8, 4) << 4) | (get_uint(dodeca_data[4], 4) << 0));
+  lcinfo[0]  = (get_uint(dodeca_data[5], 12);
+  lcinfo[0] |= (get_uint(dodeca_data[4], 12) << 12);
+  lcinfo[1]  = (get_uint(dodeca_data[3], 12));
+  lcinfo[1] |= (get_uint(dodeca_data[2], 12) << 12);
+  lcinfo[2]  = (get_uint(dodeca_data[1], 12));
+  lcinfo[2] |= (get_uint(dodeca_data[0], 12) << 12);
 
-  lcinfo[0] = ((mfid << 8) | get_uint(dodeca_data[4]+4, 8));
-  lcinfo[1]  = (get_uint(dodeca_data[3], 12) << 12);
-  lcinfo[1] |= (get_uint(dodeca_data[2], 12));
-  lcinfo[2]  = (get_uint(dodeca_data[1], 12) << 12);
-  lcinfo[2] |= (get_uint(dodeca_data[0], 12));
+  lcformat  = (lcinfo[0] & 0xFF);
+  mfid  = ((lcinfo[0] >> 8) & 0xFF);
 
   if (opts->errorbars == 1) {
-      printf ("mfid: %u, lcformat: 0x%02x, lcinfo: 0x%03x 0x%03x 0x%03x\n", mfid, lcformat, lcinfo[0], lcinfo[1], lcinfo[2]);
-      decode_lcf(state, lcformat>>2, lcinfo);
+      printf ("mfid: %u, lcformat: 0x%02x, lcinfo: 0x%06x 0x%06x 0x%06x\n", mfid, lcformat, lcinfo[0], lcinfo[1], lcinfo[2]);
+      decode_lcf(state, lcinfo);
   }
 }
 
