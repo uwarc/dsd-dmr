@@ -31,6 +31,7 @@ void print_datascope(dsd_state *state, int *lbuf2, unsigned int lsize)
     }
     for (i = 0; i < lsize; i++) {
         o = (lbuf2[i] + 32768) / 1024;
+        if (o > 63) o = 63;
         spectrum[o]++;
     }
     if (state->symbolcnt > (4800 / SCOPERATE)) {
