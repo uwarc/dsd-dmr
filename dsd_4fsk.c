@@ -6,30 +6,18 @@
 #include "fsk4_rrc_filter_coeffs.h"
 #define FSK4_MAX(a,b) ((a) > (b) ? (a) : (b))
 #define FSK4_MIN(a,b) ((a) > (b) ? (b) : (a))
+float fast_atanf(float z);
+
+#ifndef FFTCOMPLEX_T_DEFINED
+typedef struct FFTComplex {
+    float re, im;
+} FFTComplex;
+#define FFTCOMPLEX_T_DEFINED
+#endif
 
 #if defined(__amd64__) || defined(__x86_64__) || defined(__i386__) && defined(__SSE__)
-static float scalarproduct_float_sse(float *v1, float *v2, unsigned int len) {
-        float sum = 0.0f;
-        unsigned int i;
-
-        for(i=0; i<len; i+=4) {
-            __asm__ volatile(
-                 "movups  (%1), %%xmm2 \n\t"
-                 "movaps  (%2), %%xmm3 \n\t"
-                 "mulps %%xmm3, %%xmm2 \n\t"
-                 "addps %%xmm2, %0 \n\t"
-                :"=x"(sum) :"r"(&v1[i]), "r"(&v2[i]));
-        }
-        __asm__ volatile(
-                 "movaps      %0, %%xmm5 \n\t"
-                 "shufps   $0x1b, %0, %%xmm5 \n\t"
-                 "addps       %0, %%xmm5 \n\t"
-                 "movhlps %%xmm5, %0     \n\t"
-                 "addps   %%xmm5, %0     \n\t"
-                :"+x"(sum));
-        return sum;
-}
-#define scalarproduct_float scalarproduct_float_sse
+float scalarproduct_fir_float_sse(float *v1, float *v2, unsigned int len);
+#define scalarproduct_fir_float scalarproduct_fir_float_sse
 #elif defined(__ARM_NEON__)
 static float scalarproduct_float_neon(float *a, float *b, unsigned int len)
 {
@@ -60,7 +48,7 @@ static float scalarproduct_float_neon(float *a, float *b, unsigned int len)
                        "  vmla.f32 q1, q2, q3\n"
                        "  subs %[remainder], %[remainder], #4\n"
                        "  bne 2b\n"
-                       "2:"
+                       "3:"
                        "  vadd.f32 d2, d2, d3\n"
                        "  vpadd.f32 d2, d2, d2\n"
                        "  vmov.f32 %[ret], d2[0]\n"
@@ -73,21 +61,23 @@ static float scalarproduct_float_neon(float *a, float *b, unsigned int len)
 }
 #define scalarproduct_float scalarproduct_float_neon
 #else
-static float scalarproduct_float_c(float *v1, float *v2, unsigned int len)
+static float scalarproduct_fir_float_c(float *v1, float *v2, unsigned int len)
 {
-    float p = 0.0f;
+    float p = 0.0;
     unsigned int i;
     for (i = 0; i < len; i++) {
-        p += v1[i] * v2[i];
+        float t = v1[i] + v1[2*len - i];
+        p += t * v2[i];
     }
+    p += v1[len] * v2[len];
     return p;
 }
-#define scalarproduct_float scalarproduct_float_c
+#define scalarproduct_fir_float scalarproduct_fir_float_c
 #endif
 
 // internal fast loop (must be this high to acquire symbol sync)
-#define K_FINE_FREQUENCY 0.125f
-//#define K_FINE_FREQUENCY 0.0625f
+//#define K_FINE_FREQUENCY 0.125f
+#define K_FINE_FREQUENCY 0.0625f
 // tracking loop gain constant
 #define K_SYMBOL_SPREAD 0.0100f
 #define K_SYMBOL_TIMING 0.025f
@@ -175,20 +165,86 @@ unsigned int fsk4_tracking_loop_mmse(dsd_state *state, float input, float *outpu
   return 0;
 }
 
+// approximate sqrt(x^2 + y^2)
+static float
+envelope(FFTComplex x)
+{
+    float r_abs = fabsf(x.re);
+    float i_abs = fabsf(x.im);
+
+    if(r_abs > i_abs)
+        return r_abs + 0.4f * i_abs;
+    else
+        return i_abs + 0.4f * r_abs;
+}
+
+static void
+feedforward_agc(FFTComplex *in, unsigned int ninput, FFTComplex *out)
+{
+    unsigned int i, j;
+    float gain;
+
+    for(i = 0; i < ninput; i++) {
+      //float max_env = 1e-12;    // avoid divide by zero
+      float max_env = 1e-4;   // avoid divide by zero, indirectly set max gain
+      for(j = 0; j < 16; j++) {
+        max_env = FSK4_MAX(max_env, envelope(in[i+j]));
+      }
+      gain = 1.0f / max_env;
+      out[i].re = gain * in[i].re;
+      out[i].im = gain * in[i].im;
+    }
+}
+
+static inline float polar_disc_fast(float ar, float aj, float br, float bj)
+{
+    float x = ar*br + aj*bj;
+    float y = aj*br - ar*bj;
+    float z;
+    
+    if ((y != y) || (x != x))
+        return 0.0f;
+
+    y += 1e-12f;
+    if (x < 1e-12f) {
+        z = (float)M_PI * 0.5f;
+    } else {
+        /* compute y/x */
+        z=fast_atanf(fabsf(y/x));
+        if (x < 0.0f) {
+            z = (float)M_PI - z;
+        }
+    }
+
+    if (z != z) {
+        z = 0.0f;
+    }
+
+    if (y < 0.0f) {
+        z = -z;
+    }
+
+    return (z * 0.31831f);
+}
+
 static float 
 readFromBuffer_s16(int in_fd, dsd_state *state, ssize_t *result)
 {
+    short tmpbuf[1024];
+    unsigned int i;
     float ret = 0.0f;
     if (state->inbuf_pos < state->inbuf_size) {
         *result = 1;
-        ret = (float)state->inbuffer[state->inbuf_pos++];
+        ret = state->inbuffer[state->inbuf_pos++];
     } else {
         state->inbuf_pos = 1;
-        *result = read(in_fd, state->inbuffer, 1024 * sizeof(short));
+        *result = read(in_fd, tmpbuf, 1024 * sizeof(short));
         state->inbuf_size = (*result / sizeof(short));
-        ret = (float)state->inbuffer[0];
+        for (i = 0; i < state->inbuf_size; i++) {
+            state->inbuffer[i] = ((float)tmpbuf[i] / 32768.0f);
+        }
+        ret = state->inbuffer[0];
     }
-    ret *= (1.0f / 32768.0f);
     return ret;
 }
 
@@ -198,12 +254,38 @@ readFromBuffer_f32(int in_fd, dsd_state *state, ssize_t *result)
     float ret = 0.0f;
     if (state->inbuf_pos < state->inbuf_size) {
         *result = 1;
-        ret = state->inbuffer2[state->inbuf_pos++];
+        ret = state->inbuffer[state->inbuf_pos++];
     } else {
         state->inbuf_pos = 1;
-        *result = read(in_fd, state->inbuffer2, 1024 * sizeof(float));
+        *result = read(in_fd, state->inbuffer, 1024 * sizeof(float));
         state->inbuf_size = (*result / sizeof(float));
-        ret = state->inbuffer2[0];
+        ret = state->inbuffer[0];
+    }
+    if (ret != ret) ret = 0.0f;
+    return ret;
+}
+
+static float
+readFromBuffer_f32_iq(int in_fd, dsd_state *state, ssize_t *result)
+{
+    FFTComplex iqbuf[1024];
+    unsigned int i;
+    float ret = 0.0f;
+    if (state->inbuf_pos < state->inbuf_size) {
+        *result = 1;
+        ret = state->inbuffer[state->inbuf_pos++];
+    } else {
+        state->inbuf_pos = 1;
+        *result = read(in_fd, iqbuf, 1024 * sizeof(FFTComplex));
+        state->inbuf_size = (*result / sizeof(FFTComplex));
+        state->inbuffer[0] = polar_disc_fast(iqbuf[0].re, iqbuf[0].im, state->prev_r, state->prev_j);
+        for (i = 1; i < state->inbuf_size; i++) {
+            state->inbuffer[i] = polar_disc_fast(iqbuf[i].re, iqbuf[i].im,
+                                                 iqbuf[i-1].re, iqbuf[i-1].im);
+        }
+        state->prev_r = iqbuf[state->inbuf_size - 1].re;
+        state->prev_j = iqbuf[state->inbuf_size - 1].im;
+        ret = state->inbuffer[0];
     }
     if (ret != ret) ret = 0.0f;
     return ret;
@@ -222,34 +304,17 @@ dmr_filter(dsd_state *state, float sample)
     state->xv[i] = state->xv[i+1];
 
   state->xv[RRC_NZEROS] = sample; // unfiltered sample in
-  sum = scalarproduct_float(state->xv, xcoeffs, 84);
+  sum = scalarproduct_fir_float(state->xv, xcoeffs, 40);
   return (sum * ngain); // filtered sample out
-}
-
-float
-nxdn_filter(dsd_state *state, float sample)
-{
-  float sum = 0.0f;
-  unsigned int i;
-
-  for (i = 0; i < RRC_NXZEROS; i++)
-    state->xv[i] = state->xv[i+1];
-
-  state->xv[RRC_NXZEROS] = sample; // unfiltered sample in
-  sum = scalarproduct_float(state->xv, nxcoeffs, 136);
-  return (sum * nxgain); // filtered sample out
 }
 
 int
 getSymbol (dsd_opts *opts, dsd_state *state, int have_sync)
 {
-    unsigned int i;
-    float sample_scale =  (((state->lastsynctype & ~1) != 0) ? 0.0015432f : 0.0016666f);
     float sample_out = 0.0f;
     ssize_t result = 0;
 
     // first we run through all provided data
-    //for(i = 0; i < 48000; i++) {
     while (1) {
         float sample = 0.0f;
 
@@ -260,14 +325,17 @@ getSymbol (dsd_opts *opts, dsd_state *state, int have_sync)
         } else if (opts->audio_in_format == 1) {
             //result = read (opts->audio_in_fd, &sample, 4);
             sample = readFromBuffer_f32(opts->audio_in_fd, state, &result);
+        } else if (opts->audio_in_format == 2) {
+            sample = readFromBuffer_f32_iq(opts->audio_in_fd, state, &result);
         }
-        sample *= (24000.0f * sample_scale);
 
         if(result <= 0) {
           cleanupAndExit (opts, state);
         }
 
         sample = dmr_filter(state, sample);
+        sample *= 16.325f;
+        sample *= state->input_gain;
         if (fsk4_tracking_loop_mmse(state, sample, &sample_out)) {
             state->symbolcnt++;
             return lrintf(sample_out * 1024.0f);
