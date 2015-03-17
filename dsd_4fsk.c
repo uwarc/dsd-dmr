@@ -291,6 +291,7 @@ readFromBuffer_f32_iq(int in_fd, dsd_state *state, ssize_t *result)
     return ret;
 }
 
+// 1.0546365475f
 float ngain = 0.101333437f;
 float nxgain = 0.062659371644565f;
 

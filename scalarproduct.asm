@@ -112,7 +112,6 @@ scalarproduct_fir_float_sse:
     movhlps  xmm0, xmm1
     addps    xmm0, xmm1
     movss    xmm2, [r0+r2]
-    mulss    xmm2, [r1+r2]
     addss    xmm0, xmm2
 %ifndef ARCH_X86_64
     movss     [esp + stack_offset + 8],  xmm0
