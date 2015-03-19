@@ -45,7 +45,7 @@ unsigned int
 processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
 {
   // extracts AMBE frames from X2TDMA frame
-  int i, j, dibit;
+  int i, j, k, dibit;
   unsigned char *dibit_p;
   unsigned int total_errs = 0;
   char ambe_fr[4][24];
@@ -53,15 +53,12 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
   char ambe_fr3[4][24];
   char sync[25];
   unsigned char syncdata[24];
-  unsigned char mfid = 0, lcformat = 0;
-  char lcinfo[57];
-  char parity;
+  unsigned char infodata[82];
+  unsigned int lcinfo[3];    // Data in hex-words (6 bit words), stored packed in groups of four, in a uint32_t
   unsigned char cachbits[25];
   unsigned char cach_hdr = 0, cach_hdr_hamming = 0;
   unsigned char eeei = 0, aiei = 0;
   int mutecurrentslot = 0;
-
-  lcinfo[56] = 0;
 
   dibit_p = state->dibit_buf_p - 120;
   for (j = 0; j < 6; j++) {
@@ -152,94 +149,44 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
           aiei = (1 & (syncdata[2] >> 1));      // bit 1
 
           if ((eeei == 0) && (aiei == 0)) {
-              mfid |= ((1 & syncdata[4]) << 4); // bit 0
-              mfid |= ((1 & syncdata[8]) << 3); // bit 0
-              mfid |= ((1 & syncdata[12]) << 2);        // bit 0
-              mfid |= ((1 & syncdata[16]) << 1);        // bit 0
-              lcformat |= ((1 & (syncdata[4] >> 1)) << 7);      // bit 1
-              lcformat |= ((1 & (syncdata[8] >> 1)) << 6);      // bit 1
-              lcformat |= ((1 & (syncdata[12] >> 1)) << 5);     // bit 1
-              lcformat |= ((1 & (syncdata[16] >> 1)) << 4);     // bit 1
-              lcinfo[6] = (1 & (syncdata[5] >> 1));        // bit 1
-              lcinfo[16] = (1 & syncdata[5]);      // bit 0
-              lcinfo[26] = (1 & (syncdata[6] >> 1));       // bit 1
-              lcinfo[36] = (1 & syncdata[6]);      // bit 0
-              lcinfo[46] = (1 & (syncdata[7] >> 1));       // bit 1
-              parity = (1 & syncdata[7]);  // bit 0
-              lcinfo[7] = (1 & (syncdata[9] >> 1));        // bit 1
-              lcinfo[17] = (1 & syncdata[9]);      // bit 0
-              lcinfo[27] = (1 & (syncdata[10] >> 1));      // bit 1
-              lcinfo[37] = (1 & syncdata[10]);     // bit 0
-              lcinfo[47] = (1 & (syncdata[11] >> 1));      // bit 1
-              parity = (1 & syncdata[11]); // bit 0
-              lcinfo[8] = (1 & (syncdata[13] >> 1));       // bit 1
-              lcinfo[18] = (1 & syncdata[13]);     // bit 0
-              lcinfo[28] = (1 & (syncdata[14] >> 1));      // bit 1
-              lcinfo[38] = (1 & syncdata[14]);     // bit 0
-              lcinfo[48] = (1 & (syncdata[15] >> 1));      // bit 1
-              parity = (1 & syncdata[15]); // bit 0
-              lcinfo[9] = (1 & (syncdata[17] >> 1));       // bit 1
-              lcinfo[19] = (1 & syncdata[17]);     // bit 0
-              lcinfo[29] = (1 & (syncdata[18] >> 1));      // bit 1
-              lcinfo[39] = (1 & syncdata[18]);     // bit 0
-              lcinfo[49] = (1 & (syncdata[19] >> 1));      // bit 1
-              parity = (1 & syncdata[19]); // bit 0
+              for (k = 0; k < 4; k++) {
+                infodata[ 0+k] = (1 & (syncdata[4] >> 1));      // bit 1
+                infodata[11+k] = (1 & syncdata[4]); // bit 0
+                infodata[22+k] = (1 & (syncdata[5] >> 1));        // bit 1
+                infodata[32+k] = (1 & syncdata[5]);      // bit 0
+                infodata[42+k] = (1 & (syncdata[6] >> 1));       // bit 1
+                infodata[52+k] = (1 & syncdata[6]);      // bit 0
+                infodata[62+k] = (1 & (syncdata[7] >> 1));       // bit 1
+                infodata[72+k] = (1 & syncdata[7]);  // bit 0
+              }
           }
       } else if (j == 2) {
           if ((eeei == 0) && (aiei == 0)) {
-              mfid |= (1 & syncdata[4]); // bit 0
-              lcformat |= ((1 & (syncdata[4] >> 1)) << 3);      // bit 1
-              lcformat |= ((1 & (syncdata[8] >> 1)) << 2);      // bit 1
-              lcformat |= ((1 & (syncdata[12] >> 1)) << 1);     // bit 1
-              lcformat |= ((1 & (syncdata[16] >> 1)) << 0);     // bit 1
-              lcinfo[10] = (1 & (syncdata[5] >> 1));       // bit 1
-              lcinfo[20] = (1 & syncdata[5]);      // bit 0
-              lcinfo[30] = (1 & (syncdata[6] >> 1));       // bit 1
-              lcinfo[40] = (1 & syncdata[6]);      // bit 0
-              lcinfo[50] = (1 & (syncdata[7] >> 1));       // bit 1
-              parity = (1 & syncdata[7]);  // bit 0
-              lcinfo[0] = (1 & syncdata[8]);       // bit 0
-              lcinfo[11] = (1 & (syncdata[9] >> 1));       // bit 1
-              lcinfo[21] = (1 & syncdata[9]);      // bit 0
-              lcinfo[31] = (1 & (syncdata[10] >> 1));      // bit 1
-              lcinfo[41] = (1 & syncdata[10]);     // bit 0
-              lcinfo[51] = (1 & (syncdata[11] >> 1));      // bit 1
-              parity = (1 & syncdata[11]); // bit 0
-              lcinfo[1] = (1 & syncdata[12]);      // bit 0
-              lcinfo[12] = (1 & (syncdata[13] >> 1));      // bit 1
-              lcinfo[22] = (1 & syncdata[13]);     // bit 0
-              lcinfo[32] = (1 & (syncdata[14] >> 1));      // bit 1
-              lcinfo[42] = (1 & syncdata[14]);     // bit 0
-              lcinfo[52] = (1 & (syncdata[15] >> 1));      // bit 1
-              parity = (1 & syncdata[15]); // bit 0
-              lcinfo[2] = (1 & syncdata[16]);      // bit 0
-              lcinfo[13] = (1 & (syncdata[17] >> 1));      // bit 1
-              lcinfo[23] = (1 & syncdata[17]);     // bit 0
-              lcinfo[33] = (1 & (syncdata[18] >> 1));      // bit 1
-              lcinfo[43] = (1 & syncdata[18]);     // bit 0
-              lcinfo[53] = (1 & (syncdata[19] >> 1));      // bit 1
-              parity = (1 & syncdata[19]); // bit 0
+              for (k = 4; k < 8; k++) {
+                infodata[ 0+k] = (1 & (syncdata[4] >> 1));      // bit 1
+                infodata[11+k] = (1 & syncdata[4]); // bit 0
+                infodata[22+k] = (1 & (syncdata[5] >> 1));        // bit 1
+                infodata[32+k] = (1 & syncdata[5]);      // bit 0
+                infodata[42+k] = (1 & (syncdata[6] >> 1));       // bit 1
+                infodata[52+k] = (1 & syncdata[6]);      // bit 0
+                infodata[62+k] = (1 & (syncdata[7] >> 1));       // bit 1
+                infodata[72+k] = (1 & syncdata[7]);  // bit 0
+              }
           }
       } else if (j == 4) {
           if ((eeei == 0) && (aiei == 0)) {
-              mfid |= ((1 & (syncdata[4] >> 1)) << 7);  // bit 1
-              mfid |= ((1 & (syncdata[8] >> 1)) << 6);  // bit 1
-              mfid |= ((1 & (syncdata[12] >> 1)) << 5); // bit 1
-              lcinfo[3] = (1 & syncdata[4]);       // bit 0
-              lcinfo[14] = (1 & (syncdata[5] >> 1));       // bit 1
-              lcinfo[24] = (1 & syncdata[5]);      // bit 0
-              lcinfo[34] = (1 & (syncdata[6] >> 1));       // bit 1
-              lcinfo[44] = (1 & syncdata[6]);      // bit 0
-              lcinfo[54] = (1 & (syncdata[7] >> 1));       // bit 1
-              parity = (1 & syncdata[7]);  // bit 0
-              lcinfo[4] = (1 & syncdata[8]);       // bit 0
-              lcinfo[15] = (1 & (syncdata[9] >> 1));       // bit 1
-              lcinfo[25] = (1 & syncdata[9]);      // bit 0
-              lcinfo[35] = (1 & (syncdata[10] >> 1));      // bit 1
-              lcinfo[45] = (1 & syncdata[10]);     // bit 0
-              lcinfo[55] = (1 & (syncdata[11] >> 1));      // bit 1
-              parity = (1 & syncdata[11]); // bit 0
-              lcinfo[5] = (1 & syncdata[12]);      // bit 0
+              for (k = 8; k < 10; k++) {
+                infodata[ 0+k] = (1 & (syncdata[4] >> 1));      // bit 1
+                infodata[11+k] = (1 & syncdata[4]); // bit 0
+                infodata[22+k] = (1 & (syncdata[5] >> 1));        // bit 1
+                infodata[32+k] = (1 & syncdata[5]);      // bit 0
+                infodata[42+k] = (1 & (syncdata[6] >> 1));       // bit 1
+                infodata[52+k] = (1 & syncdata[6]);      // bit 0
+                infodata[62+k] = (1 & (syncdata[7] >> 1));       // bit 1
+                infodata[72+k] = (1 & syncdata[7]);  // bit 0
+              }
+              infodata[10] = (1 & (syncdata[12] >> 1)); // bit 1
+              infodata[21] = (1 & syncdata[12]);      // bit 0
           }
         }
 
@@ -320,7 +267,10 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
     }
 
     if ((eeei == 0) && (aiei == 0)) {
-        printf ("mfid: %u, lcformat: 0x%02x, lcinfo: %s\n", mfid, lcformat, lcinfo);
+        lcinfo[0] = get_uint(infodata, 24);
+        lcinfo[1] = get_uint(infodata+24, 24);
+        lcinfo[2] = get_uint(infodata+48, 24);
+        decode_p25_lcf(lcinfo);
     }
     return total_errs;
 }
