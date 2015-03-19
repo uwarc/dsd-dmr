@@ -18,22 +18,22 @@
 #include "dsd.h"
 
 static const char *slottype_to_string[16] = {
-      "PI Header    ", // 0000
-      "VOICE Header ", // 0001
-      "TLC          ", // 0010
-      "CSBK         ", // 0011
-      "MBC Header   ", // 0100
-      "MBC          ", // 0101
-      "DATA Header  ", // 0110
-      "RATE 1/2 DATA", // 0111
-      "RATE 3/4 DATA", // 1000
-      "Slot idle    ", // 1001
-      "Rate 1 DATA  ", // 1010
-      "Unknown/Bad  ", // 1011
-      "Unknown/Bad  ", // 1100
-      "Unknown/Bad  ", // 1101
-      "Unknown/Bad  ", // 1110
-      "Unknown/Bad  "  // 1111
+      "PI Header", // 0000
+      "VOICE Header:", // 0001
+      "TLC:", // 0010
+      "CSBK:", // 0011
+      "MBC Header:", // 0100
+      "MBC:", // 0101
+      "DATA Header:", // 0110
+      "RATE 1/2 DATA:", // 0111
+      "RATE 3/4 DATA:", // 1000
+      "Slot idle", // 1001
+      "Rate 1 DATA", // 1010
+      "Unknown/Bad (11)", // 1011
+      "Unknown/Bad (12)", // 1100
+      "Unknown/Bad (13)", // 1101
+      "Unknown/Bad (14)", // 1110
+      "Unknown/Bad (15)"  // 1111
 };
 
 static unsigned char fid_mapping[256] = {
@@ -78,31 +78,10 @@ static char *headertypes[16] = {
     "Hdr8", "Hdr9", "Hdr10", "Hdr11", "Hdr12", "DSDa", "RSDa", "Prop"
 };
 
-static char *csbk_ids[] = {
-    "Aloha", // 25
-    "UDT Download Header", // 26
-    "UDT Upload Header", // 27
-    "Ahoy", // 28
-    "???", // 29
-    "Ackvitation", // 30
-    "Random Access Service Request", // 31
-    "Ack Outbound TSCC", // 32
-    "Ack Inbound TSCC", // 33
-    "Ack Outbound Payload", // 34
-    "Ack Inbound Payload", // 35
-    "???", // 36
-    "???", // 37
-    "Nack Response", // 38
-    "???", // 39
-    "C Bcast", // 40
-    "???", // 41
-    "Maintenance", // 42
-    "???", // 43
-    "???", // 44
-    "???", // 45
-    "Clear", // 46
-    "Protect" // 47
-};
+static char *saptypes[16] = {
+    "UDT", "1", "TCP HC", "UDP HC", "IP Pkt", "ARP Pkt", "6", "7",
+    "8", "Prop Pkt", "Short Data", "11", "12", "13", "14", "15"
+}; 
 
 static unsigned char TrellisDibitDeinterleave[49] = 
 {
@@ -135,22 +114,14 @@ static unsigned char cach_deinterleave[24] = {
 
 static unsigned char hamming7_4_decode[64] =
 {
-    0x00, 0x03, 0x05, 0xE7,     /* 0x00 to 0x07 */
-    0x09, 0xEB, 0xED, 0xEE,     /* 0x08 to 0x0F */
-    0x03, 0x33, 0x4D, 0x63,     /* 0x10 to 0x17 */
-    0x8D, 0xA3, 0xDD, 0xED,     /* 0x18 to 0x1F */
-    0x05, 0x2B, 0x55, 0x65,     /* 0x20 to 0x27 */
-    0x8B, 0xBB, 0xC5, 0xEB,     /* 0x28 to 0x2F */
-    0x81, 0x63, 0x65, 0x66,     /* 0x30 to 0x37 */
-    0x88, 0x8B, 0x8D, 0x6F,     /* 0x38 to 0x3F */
-    0x09, 0x27, 0x47, 0x77,     /* 0x40 to 0x47 */
-    0x99, 0xA9, 0xC9, 0xE7,     /* 0x48 to 0x4F */
-    0x41, 0xA3, 0x44, 0x47,     /* 0x50 to 0x57 */
-    0xA9, 0xAA, 0x4D, 0xAF,     /* 0x58 to 0x5F */
-    0x21, 0x22, 0xC5, 0x27,     /* 0x60 to 0x67 */
-    0xC9, 0x2B, 0xCC, 0xCF,     /* 0x68 to 0x6F */
-    0x11, 0x21, 0x41, 0x6F,     /* 0x70 to 0x77 */
-    0x81, 0xAF, 0xCF, 0xFF      /* 0x78 to 0x7F */
+    0x00, 0x01, 0x08, 0x24, 0x01, 0x11, 0x53, 0x91, 
+    0x06, 0x2A, 0x23, 0x22, 0xB3, 0x71, 0x33, 0x23, 
+    0x06, 0xC4, 0x54, 0x44, 0x5D, 0x71, 0x55, 0x54, 
+    0x66, 0x76, 0xE6, 0x24, 0x76, 0x77, 0x53, 0x7F, 
+    0x08, 0xCA, 0x88, 0x98, 0xBD, 0x91, 0x98, 0x99, 
+    0xBA, 0xAA, 0xE8, 0x2A, 0xBB, 0xBA, 0xB3, 0x9F, 
+    0xCD, 0xCC, 0xE8, 0xC4, 0xDD, 0xCD, 0x5D, 0x9F, 
+    0xE6, 0xCA, 0xEE, 0xEF, 0xBD, 0x7F, 0xEF, 0xFF, 
 };
 
 static unsigned char hamming7_4_correct(unsigned char value)
@@ -192,7 +163,7 @@ void Hamming15_11_3_Correct(unsigned int *block)
 }
 
 static const char hex[]="0123456789abcdef";
-static void hexdump_packet(unsigned char payload[96], unsigned char packetdump[31])
+static void hexdump_packet(unsigned char payload[64], unsigned char packetdump[31])
 {
     unsigned int i, j, l = 0;
     for (i = 0, j = 0; i < 80; i++) {
@@ -213,9 +184,10 @@ static void process_dataheader(unsigned char payload[96])
 {
     // Common elements to all data header types
     unsigned int j = get_uint(payload+4, 4); // j is used as header type
-    printf("DATA Header: %s: %s:%u SrcRId: %u %c SAP:%u Misc:0x%04x\n", headertypes[j],
+    unsigned int sap = get_uint(payload+8, 4);
+    printf("%s: %s: %u SrcRId: %u %c SAP: %s BF:0x%02x Misc:0x%02x\n", headertypes[j],
            ((payload[0])?"Grp":"DestRID"), get_uint(payload+16, 24), get_uint(payload+40, 24),
-           ((payload[1]) ? 'A' : ' '), get_uint(payload+8, 4), get_uint(payload+64, 16));
+           ((payload[1]) ? 'A' : ' '), saptypes[sap], get_uint(payload+64, 8), get_uint(payload+72, 8));
 }
 
 static unsigned int processFlco(dsd_state *state, unsigned char payload[97], char flcostr[1024])
@@ -259,7 +231,7 @@ static unsigned int processFlco(dsd_state *state, unsigned char payload[97], cha
   return k;
 }
 
-static unsigned int ProcessConnectPlusCSBK(dsd_state *state, unsigned char *payload, unsigned int csbk_id, char csbkstr[1024])
+static unsigned int ProcessConnectPlusCSBK(unsigned char *payload, unsigned int csbk_id, char csbkstr[1024])
 {
     // The information to decode these packets was kindly provided by inigo88 on the Radioreference forums
     // see http://forums.radioreference.com/digital-voice-decoding-software/213131-understanding-connect-plus-trunking-6.html#post1866950
@@ -268,30 +240,30 @@ static unsigned int ProcessConnectPlusCSBK(dsd_state *state, unsigned char *payl
     //                         1         3         4         5         6                          
     // bits 40 - 64 have an unknown purpose
     //
-    unsigned int i, k = 0, src_rid, dest_rid, lcn;
+    unsigned int i, k = 0, lcn;
+    unsigned int txid = get_uint(payload, 24);
+    unsigned int rxid = get_uint(payload+24, 24);
     if (csbk_id == 1) {
         unsigned int l = get_uint(payload+40, 24);
-        k = snprintf(csbkstr, 1023, "Trident MS (Motorola) - Connect+ Neighbors: %2u %2u %2u %2u %2u ?: 0x%06x\n",
-                      get_uint(payload, 8), get_uint(payload+8, 8), get_uint(payload+16, 8),
-                      get_uint(payload+24, 8), get_uint(payload+32, 8), l);
+        k = snprintf(csbkstr, 1023, "Trident MS (Motorola) - Connect+ Neighbors: %u %u %u %u %u ?: 0x%06x\n",
+                     get_uint(payload, 8), get_uint(payload+8, 8), get_uint(payload+16, 8),
+                     get_uint(payload+24, 8), get_uint(payload+32, 8), l);
     } else if (csbk_id == 3) {
-        src_rid = get_uint(payload, 24);
-        dest_rid = get_uint(payload+24, 24);
         lcn = get_uint(payload+48, 4);
-        k = snprintf(csbkstr, 1023, "Trident MS (Motorola) - Connect+ Voice Goto: SourceRId:%u %s:%u LCN:%u Slot:%c ?:0x%x ",
-                      src_rid, (payload[63] ? "DestRId" : "GroupRId"), dest_rid,
-                      lcn, (payload[52] ? '1' : '0'), get_uint(payload+53, 11));
+        k = snprintf(csbkstr, 1023, "Trident MS (Motorola) - Connect+ Voice Goto: SourceRId:%u %s:%u LCN:%u Slot:%c ?:0x%x\n",
+                     txid, (payload[63] ? "DestRId" : "GroupRId"), rxid,
+                     lcn, (payload[52] ? '1' : '0'), get_uint(payload+53, 11));
     } else if (csbk_id == 6) {
-        src_rid = get_uint(payload, 24);
         lcn = get_uint(payload+24, 4);
-        k = snprintf(csbkstr, 1023, "Trident MS (Motorola) - Connect+ Data Goto: RadioId:%u LCN:%u Slot:%c ?: 0x%X 0x%08x ",
-                      src_rid, lcn, (payload[28] ? '1' : '0'),
-                      get_uint(payload+29, 5), get_uint(payload+32, 32));
+        k = snprintf(csbkstr, 1023, "Trident MS (Motorola) - Connect+ Data Goto: RadioId:%u LCN:%u Slot:%c ?:0x%x 0x%08x\n",
+                     txid, lcn, (payload[28] ? '1' : '0'),
+                     get_uint(payload+29, 5), get_uint(payload+32, 32));
+    } else if (csbk_id == 12) {
+        k = snprintf(csbkstr, 1023, "Trident MS (Motorola) - Connect+ ??? (Data Related): RadioId:%u ?:0x%06x%04x\n",
+                     txid, rxid, get_uint(payload+48, 16));  
     } else if (csbk_id == 24) {
-        src_rid = get_uint(payload, 24);
-        dest_rid = get_uint(payload+24, 24);
-        k = snprintf(csbkstr, 1023, "Trident MS (Motorola) - Connect+ Affiliate: SourceRId:%u GroupRId:%u ?:0x%x ",
-                      src_rid, dest_rid, get_uint(payload+48, 24));  
+        k = snprintf(csbkstr, 1023, "Trident MS (Motorola) - Connect+ Affiliate: SourceRId:%u GroupRId:%u ?:0x%04x\n",
+                     txid, rxid, get_uint(payload+48, 16));  
     } else {
         k = snprintf(csbkstr, 1023, "Unknown Trident MS (Motorola) - Connect+ CSBK: CSBKO: %u, packet_dump: ", csbk_id);
         for (i = 0; i < 8; i++) {
@@ -300,6 +272,7 @@ static unsigned int ProcessConnectPlusCSBK(dsd_state *state, unsigned char *payl
             csbkstr[k++] = hex[((l >> 0) & 0x0f)];
             csbkstr[k++] = ' ';
         }
+        csbkstr[k++] = '\n';
         csbkstr[k] = '\0';
     }
     return k;
@@ -312,7 +285,7 @@ void processEmb (dsd_state *state, unsigned char lcss, unsigned char emb_fr[4][3
   unsigned char fid = 0;
   unsigned char payload[97];
 
-  //printf("\nDMR Embedded Signalling present in voice packet: LCSS: %u\n", lcss);
+  printf("\nDMR Embedded Signalling present in voice packet: LCSS: %u\n", lcss);
 
   // Deinterleave
   for (i = 0; i < 8; i++) {
@@ -458,43 +431,6 @@ static void ProcessRate34Data(unsigned char infodata[196], unsigned char out[18]
     }
 }
 
-#ifndef NO_REEDSOLOMON
-// rs_mask = 0x96 for Voice Header, 0x99 for TLC.
-static unsigned int check_and_fix_reedsolomon_12_09_04(ReedSolomon *rs, unsigned char payload[97], unsigned char rs_mask)
-{
-  unsigned int i, errorFlag;
-  unsigned char input[255];
-  unsigned char output[255];
-
-  for (i=0; i<255; i++) {
-    input[i] = 0;
-    output[i] = 0;
-  }
-
-  for(i = 0; i < 12; i++) {
-    input[i] = get_uint(payload+8*i, 8);
-  }
-  input[ 9] ^= rs_mask;
-  input[10] ^= rs_mask;
-  input[11] ^= rs_mask;
-
-  /* decode recv[] */
-  errorFlag = rs8_decode(rs, input, output);
-
-  for(i = 0; i < 12; i++) {
-    payload[8*i  ] = ((output[i] & 128)? 1 : 0);
-    payload[8*i+1] = ((output[i] &  64)? 1 : 0);
-    payload[8*i+2] = ((output[i] &  32)? 1 : 0);
-    payload[8*i+3] = ((output[i] &  16)? 1 : 0);
-    payload[8*i+4] = ((output[i] &   8)? 1 : 0);
-    payload[8*i+5] = ((output[i] &   4)? 1 : 0);
-    payload[8*i+6] = ((output[i] &   2)? 1 : 0);
-    payload[8*i+7] = ((output[i] &   1)? 1 : 0);
-  }
-  return errorFlag;
-}
-#endif
-
 void
 processDMRdata (dsd_opts * opts, dsd_state * state)
 {
@@ -523,11 +459,11 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
       cach1bits[cach_deinterleave[2*i]] = (1 & (dibit >> 1));    // bit 1
       cach1bits[cach_deinterleave[2*i+1]] = (1 & dibit);   // bit 0
   }
-  cach1_hdr  = ((cach1bits[0] << 0) | (cach1bits[1] << 1) | (cach1bits[2] << 2) | (cach1bits[3] << 3));
-  cach1_hdr |= ((cach1bits[4] << 4) | (cach1bits[5] << 5) | (cach1bits[6] << 6));
+  cach1_hdr  = ((cach1bits[0] << 6) | (cach1bits[1] << 5) | (cach1bits[2] << 4) | (cach1bits[3] << 3));
+  cach1_hdr |= ((cach1bits[4] << 2) | (cach1bits[5] << 1) | (cach1bits[6] << 0));
   cach1_hdr_hamming = hamming7_4_correct(cach1_hdr);
 
-  state->currentslot = ((cach1_hdr_hamming >> 1) & 1);      // bit 1
+  state->currentslot = ((cach1_hdr_hamming >> 2) & 1);      // bit 2 
   if (state->currentslot == 0) {
     state->slot0light[0] = '[';
     state->slot0light[6] = ']';
@@ -585,8 +521,15 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   golay_codeword |= getDibit (opts, state);
   golay_codeword >>= 1;
   Golay23_Correct(&golay_codeword);
-  bursttype = (golay_codeword & 0x0f);
 
+  golay_codeword &= 0x0f;
+  bursttype ^= golay_codeword;
+  if (bursttype & 1) state->debug_header_errors++;
+  if (bursttype & 2) state->debug_header_errors++;
+  if (bursttype & 4) state->debug_header_errors++;
+  if (bursttype & 8) state->debug_header_errors++;
+
+  bursttype = golay_codeword;
   if ((bursttype == 1) || (bursttype == 2)) {
     closeMbeOutFile (opts, state);
     state->errs2 = 0;
@@ -605,7 +548,7 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   // first half current slot
   skipDibit (opts, state, 54);
 
-  if ((bursttype == 0) || (bursttype == 1) || (bursttype == 2) || (bursttype == 3) || (bursttype == 6) || (bursttype == 7)) {
+  if (bursttype <= 7) {
     for (i = 0; i < 96; i++) payload[i] = 0;
     ProcessBPTC(infodata, payload);
   }
@@ -619,54 +562,79 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
 
   if (bursttype != 9) {
       int level = (int) state->max / 164;
-      printf ("Sync: %s mod: GFSK, offs: %u      inlvl: %2i%% %s %s CACH: 0x%x ",
-              state->ftype, state->offset, level, state->slot0light, state->slot1light, cach1_hdr_hamming);
-      if (bursttype > 10) {
-          printf ("Unknown burst type: %u\n", bursttype);
-      } else {
-          if (bursttype == 0) {
-            hexdump_packet(payload, packetdump);
-            printf("PI Header: %s\n", packetdump);
-          } else if ((bursttype == 1) || (bursttype == 2)) {
-#ifndef NO_REEDSOLOMON
-            unsigned char rs_mask = ((bursttype == 1) ? 0x96 : 0x99);
-            unsigned int nerrs = check_and_fix_reedsolomon_12_09_04(&state->ReedSolomon_12_09_04, payload, rs_mask);
-            state->debug_header_errors += nerrs;
-#endif
-            printf("%s: fid: %s (%u)\n", ((bursttype == 1) ? "VOICE Header" : "TLC"), fids[j], fid);
+      printf ("Sync: %s mod: GFSK, offs: %4u, inlvl: %2i%% %s %s CACH: 0x%x %s ",
+              state->ftype, state->offset, level, state->slot0light, state->slot1light, cach1_hdr_hamming,
+              slottype_to_string[bursttype]);
+      if ((bursttype == 1) || (bursttype == 2)) {
+            printf("fid: %s (%u)\n", fids[j], fid);
             if ((fid == 0) || (fid == 16)) { // Standard feature, MotoTRBO Capacity+
               char flcostr[1024];
               flcostr[0] = '\0';
               processFlco(state, payload, flcostr);
               printf("%s\n", flcostr);
             }
-          } else if (bursttype == 3) {
+      } else if ((bursttype == 3) || (bursttype == 4)) {
             unsigned char csbk_id = get_uint(payload+2, 6);
-            printf("fid: %s (%u) ", fids[j], fid);
+            unsigned int txid = get_uint(payload+32, 24);
+            unsigned int rxid = get_uint(payload+56, 24);
+            char csbkstr[1024];
+            csbkstr[0] = '\0';
             if (csbk_id == 0x3d) {
               unsigned char nblks = get_uint(payload+24, 8);
-              unsigned int txid = get_uint(payload+32, 24);
-              unsigned int rxid = get_uint(payload+56, 24);
               printf("Preamble: %u %s blks, %s: %u RId: %u\n", nblks,
-                     ((payload[0] == '1')?"Data":"CSBK"),
-                     ((payload[1] == '1') ? "TGrp" : "TGid"),
+                     ((payload[16]) ? "Data" : "CSBK"),
+                     ((payload[17]) ? "TGrp" : "TGid"),
                      txid, rxid);
             } else {
               if (fid == 6) {
-                char csbkstr[1024];
-                csbkstr[0] = '\0';
-                ProcessConnectPlusCSBK(state, payload+16, csbk_id, csbkstr);
-                printf("%s\n", csbkstr);
+                ProcessConnectPlusCSBK(payload+16, csbk_id, csbkstr);
+                printf("%s", csbkstr);
+              } else if (fid == 16) {
+                unsigned int l1 = get_uint(payload+16, 16);
+                if ((csbk_id == 30) || (csbk_id == 62)) {
+                    char tmpStr[81];
+                    unsigned int lcn = get_uint(payload+20, 4);
+                    if (!txid && !rxid) {
+                        strcpy(tmpStr, "Idle");
+                    } else {
+                        snprintf(tmpStr, 80, "TGs: %u/%u/%u/%u/%u/%u",
+                                ((txid >> 16) & 0xFF), ((txid >> 8) & 0xFF), ((txid >> 0) & 0xFF),
+                                ((rxid >> 16) & 0xFF), ((rxid >> 8) & 0xFF), ((rxid >> 0) & 0xFF));
+                    }
+                    printf("Capacity+ Ch Status: FL:%c Slot:%c RestCh:%u ActiveCh: %c%c%c%c%c%c (%s)\n",
+                            ((payload[16] << 1) | payload[17])+0x30, payload[18]+0x30, lcn, 
+                            (payload[24] ?'1':'-'), (payload[25] ?'2':'-'), (payload[26] ?'3':'-'), (payload[27] ?'4':'-'),
+                            (payload[28] ?'5':'-'), (payload[29] ?'6':'-'), tmpStr);
+                } else if ((csbk_id == 31) || (csbk_id == 32)) {
+                    printf("Capacity+ %s: DestRId:%u SrcRId:%u ?:0x%04x\n",
+                             ((csbk_id == 32) ? "Call Alert ACK" : "Call Alert"), txid, rxid, l1);
+                } else if (csbk_id == 36) {
+                    printf("Capacity+ Radio Check: SrcRId:%u DestRId:%u ?:0x%04x\n",
+                             txid, rxid, l1);
+                } else {
+                  printf("lb: %c, id: %u, fid: %s (%u)\n", payload[0]+0x30, csbk_id, fids[j], fid);
+                }
               } else {
-                printf("CSBK: id: 0x%x\n", csbk_id);
+                printf("lb: %c, id: %u, fid: %s (%u)\n", payload[0]+0x30, csbk_id, fids[j], fid);
               }
             }
-          } else if (bursttype == 6) {
+      } else if (bursttype == 5) {
+            unsigned char csbk_id = get_uint(payload+2, 6);
+            if ((csbk_id == 40) || (csbk_id == 56)) {
+                printf("%s Appended MBC: CDefType: %u, Channel: %u, TXFreq: %u:%uMHz, RXFreq: %u:%uMHz\n",
+                       ((csbk_id == 40) ? "C_Bcast" : "C_Move"), get_uint(payload+16, 4), get_uint(payload+22, 12),
+                       get_uint(payload+33, 10), 125 * get_uint(payload+43, 13),
+                       get_uint(payload+56, 10), 125 * get_uint(payload+66, 13));
+            } else {
+                hexdump_packet(payload, packetdump);
+                printf("Unrecognised appended MBC: lb: %c, data: %s\n", payload[0]+0x30, packetdump);
+            }
+      } else if (bursttype == 6) {
             process_dataheader(payload);
-          } else if (bursttype == 7) {
+      } else if (bursttype == 7) {
             hexdump_packet(payload, packetdump);
-            printf("RATE 1/2 DATA: %s\n", packetdump);
-          } else if (bursttype == 8) {
+            printf("%s\n", packetdump);
+      } else if (bursttype == 8) {
             unsigned char payload34[12];
             ProcessRate34Data(infodata, payload34);
             for (j = 0; j < 12; j++) {
@@ -676,11 +644,10 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
                 packetdump[3*j+2] = ' ';
             }
             packetdump[36] = '\0';
-            printf("RATE 3/4 DATA: %s\n", packetdump);
-          } else {
-            printf ("%s\n", slottype_to_string[bursttype]);
-          }
-      }
+            printf("%s\n", packetdump);
+      } else {
+        printf("\n");
+      } 
   }
 }
 
