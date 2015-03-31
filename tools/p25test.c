@@ -60,6 +60,7 @@ static const char *p25frametypes[16] = {
 
 void p25_test(dsd_opts *opts)
 {
+    char tmpStr[1024];
     dsd_state state;
     unsigned short nac = 0;
     unsigned char duid = 0;
@@ -90,7 +91,8 @@ void p25_test(dsd_opts *opts)
     printf ("p25 NAC: 0x%03x, DUID: 0x%x -> %s\n",
             nac, duid, p25frametypes[duid]);
     state.duid = duid;
-    process_p25_frame(opts, &state);
+    process_p25_frame(opts, &state, tmpStr, 1023);
+    printf ("%s\n", tmpStr);
 }
 
 int main(int argc, char **argv)

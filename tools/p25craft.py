@@ -257,6 +257,7 @@ def golay_24_12_8_encode(data):
     for i in range(12):
         if data & (04000 >> i):
             codeword ^= matrix[i]
+    codeword |= 1
     return codeword
 
 # (23,12,7) Golay encoder
@@ -499,6 +500,9 @@ def construct_lc(lco, mfid, svcopt, s, tgid, dst, src):
         # individual call
         text_out("\t\tTUID  = %06x\n" % dst)
         lc |= dst << 24
+    elif lco == 20:
+        lc |= s << 48
+        lc |= tgid << 24
     else:
         sys.stderr.write("error: --lco must be 0 or 3\n")
         sys.exit(1)
@@ -790,6 +794,7 @@ def construct_ldu1(nac, ss, imbe, lsd, lco, mfid, svcopt, s, tgid, dst, src):
 
     # Low Speed Data
     lsd_syms = split_dibits(ldu1_cyclic(lsd), 16)
+    text_out("\tLSD_Encoded   = %08x\n" % ldu1_cyclic(lsd))
 
     symbols.extend(split_dibits(imbe, 72))
     symbols.extend(split_dibits(imbe ^ 2, 72)) # flipping sync bit
@@ -1667,8 +1672,6 @@ if __name__ == "__main__":
         default=False, help="audio silence (Default: false)")
     parser.add_option("-o", "--output-file", type="string", default=None,
         help="Binary output file (Default: None)")
-    parser.add_option("-q", "--quiet", action="store_true", dest="quiet",
-        default=False, help="Supress text output (Default: false)")
     parser.add_option("-f", "--flip", action="store_true", dest="flip",
         default=False, help="invert frequency deviations (Default: false)")
     parser.add_option("-l", "--late-entry", action="store_true", dest="late",
@@ -1701,9 +1704,6 @@ if __name__ == "__main__":
     assert options.rstatus <= 0x7
     assert options.ns      <= 0x7
     assert options.arg     <= 0xffffffffffffffffL
-
-    if options.quiet:
-        quiet = True
 
     if options.output_file:
         if options.output_file == '-':
