@@ -13,8 +13,8 @@ static unsigned char mfid_mapping[64] = {
 };
 
 static const char *mfids[36] = {
-   "Standard MFID (pre-2001)",
-   "Standard MFID (post-2001)",
+   "Standard (pre-2001)",
+   "Standard (post-2001)",
    "Aselsan Inc.",
    "Relm / BK Radio",
    "EADS Public Safety Inc.",
@@ -49,43 +49,6 @@ static const char *mfids[36] = {
    "Transcrypt International",
    "Vertex Standard",
    "Zetron, Inc"
-};
-
-static char *lcwids[32] = {
-    "Group Voice Channel User",
-    "Unknown (1)",
-    "Group Voice Channel Update",
-    "Unit to Unit Voice Channel User",
-    "Group Voice Channel Update - Explicit",
-    "Unit to Unit Answer Request",
-    "Telephone Interconnect Voice Channel User",
-    "Telephone Interconnect Answer Request",
-
-    "Call Termination/Cancellation", // +7
-    "Group Affiliation Query",
-    "Unit Registration Command",
-    "Unknown (18)",
-    "Status Query",
-    "Status Update",
-    "Message Update",
-    "Call Alert",
-    "Extended Function Command",
-    "Channel Identifier Update",
-    "Channel Identifier Update - Explicit",
-
-    "System Service Broadcast", // +14
-
-    "Secondary Control Channel Broadcast",
-    "Adjacent Site Status Broadcast",
-    "RFSS Status Broadcast",
-    "Network Status Broadcast",
-
-    "Unknown (36)",
-
-    "Secondary Control Channel Broadcast - Explicit",
-    "Adjacent Site Status Broadcast - Explicit",
-    "RFSS Status Broadcast - Explicit",
-    "Network Status Broadcast - Explicit"
 };
 
 static unsigned int Hamming1064Gen[6] = {
@@ -385,7 +348,7 @@ float get_p25_ber_estimate (dsd_state* state)
 /**
  * The important method that processes a full P25 HD unit.
  */
-static void
+static unsigned int 
 processHDU(dsd_opts* opts, dsd_state* state)
 {
   int i;
@@ -419,6 +382,7 @@ processHDU(dsd_opts* opts, dsd_state* state)
   // and if so what is the encryption algorithm used.
   // A code 0x80 here means that the data is unencrypted.
   algid  = (((hex_data[13] >> 2) << 4) | (hex_data[14] & 0x0f));
+  state->p25enc = (algid != 0x80);
 
   skipDibit (opts, state, 6);
 
@@ -429,7 +393,7 @@ processHDU(dsd_opts* opts, dsd_state* state)
   }
 
   state->talkgroup = talkgroup;
-  printf ("mfid: %s (%u) talkgroup: %u\n", mfids[mfid_mapping[mfid&0x3f]], mfid, talkgroup);
+  return mfid;
 }
 
 unsigned int
@@ -485,129 +449,14 @@ read_and_correct_hex_word (dsd_opts* opts, dsd_state* state, int* status_count)
   return value_out;
 }
 
-void decode_lcf(dsd_state* state, unsigned int hexdata[3])
-{
-  unsigned char lcformat = ((hexdata[0] & 0xFF) >> 2);
-  unsigned int talkgroup = (((hexdata[1] << 8) & 0x00ffffff) | (hexdata[2] >> 24));
-  unsigned int radio_id = (hexdata[2] & 0x00ffffff);
-  unsigned int channel = 0;
-  hexdata[0] >>= 8;
-  if (lcformat == 0) {
-    printf ("LCW: Group Voice Ch User%s, talkgroup: %u, radio id: %u (session mode: %s)\n",
-            ((hexdata[1] & 0x00800000) ? " Emergency" : ""),  (talkgroup & 0xffff), radio_id,
-            ((hexdata[1] & 0x00100000) ? "Circuit" : "Packet"));
-  } else if (lcformat == 1) {
-    printf ("LCW: Reserved (1)\n");
-  } else if (lcformat == 2) {
-    channel = (((talkgroup & 0x0f) << 16) | (radio_id >> 16));
-    printf ("LCW: Group Voice Ch Update, Channel A: 0x%02x/0x%06x, Group Address A: 0x%04x",
-            ((hexdata[0] >> 12) & 0x0f), (hexdata[0] & 0x0fff), (talkgroup >> 8));
-    if (channel) {
-            printf(" Channel A: 0x%02x/0x%06x, Group Address A: 0x%04x",
-                   ((talkgroup >> 4) & 0x0f), channel, (radio_id & 0xffff));
-    }
-    printf ("\n");
-  } else if (lcformat == 3) {
-    printf ("LCW: Unit-to-Unit Voice Ch Update, from %u to %u\n", radio_id, talkgroup);
-  } else if (lcformat == 4) {
-    channel = (((talkgroup & 0x0f) << 16) | (radio_id >> 16));
-    printf ("LCW: Group Voice Ch Update (Explicit), Group Address: 0x%04x, TX Channel: 0x%02x/0x%06x, RX Channel: 0x%02x/0x%06x",
-            (talkgroup >> 8), ((talkgroup >> 4) & 0x0f), channel, ((radio_id >> 12) & 0x0f), (radio_id & 0x0fff));
-  } else if (lcformat == 5) {
-    printf ("LCW: Unit-to-Unit Answer Request, from %u to %u\n", radio_id, talkgroup);
-  } else if (lcformat == 6) {
-    channel = ((talkgroup & 0xff) / 10);
-    printf ("LCW: Telephone Interconnect Voice Ch User %s, address: %u, timer: %u secs\n",
-            ((hexdata[1] & 0x00800000) ? "Emergency" : ""), radio_id, channel);
-  } else if (lcformat == 7) {
-    printf ("LCW: Telephone Interconnect Answer Request, (%u%u%u) %u%u%u-%u%u%u%u to %u\n",
-            ((hexdata[1] >> 12) & 0x0f), ((hexdata[1] >> 8) & 0x0f), ((hexdata[1] >> 4) & 0x0f), ((hexdata[1] >> 0) & 0x0f),
-            ((talkgroup >> 20) & 0x0f), ((talkgroup >> 16) & 0x0f), ((talkgroup >> 12) & 0x0f),
-            ((talkgroup >>  8) & 0x0f), ((talkgroup >>  4) & 0x0f), ((talkgroup >>  0) & 0x0f),
-            radio_id);
-  } else if (lcformat == 15) {
-    printf ("LCW: Call Termination or Cancellation, radio id: %u\n", radio_id);
-  } else if (lcformat == 16) {
-    printf ("LCW: Group Affiliation Query, from %u to %u\n", radio_id, talkgroup);
-  } else if (lcformat == 17) {
-    printf ("LCW: Unit Registration, unit %u registering on system %u, network %u\n",
-            radio_id, (talkgroup & 0x0fff), (((hexdata[0] & 0xff) << 12) | (talkgroup >> 12)));
-  } else if (lcformat == 19) {
-    printf ("LCW: Status Query, from %u to %u\n", radio_id, talkgroup);
-  } else if (lcformat == 20) {
-    printf ("LCW: Status Update, from %u to %u: User Status: 0x%02x, Unit Status: 0x%02x\n",
-            radio_id, talkgroup, ((hexdata[0] >> 8) & 0xff), (hexdata[0] & 0xff));
-  } else if (lcformat == 21) {
-    printf ("LCW: Message Update: 0x%04x (talkgroup: %u, radio_id: %u)\n",
-            (hexdata[0] & 0xffff), talkgroup, radio_id);
-  } else if (lcformat == 22) {
-    printf ("LCW: Call Alert, from %u to %u\n", radio_id, talkgroup);
-  } else if (lcformat == 23) {
-    unsigned int extended_function_command = (hexdata[0] & 0xffff);
-    printf ("LCW: Extended Function 0x%04x, arg: 0x%06x, target: %u\n", extended_function_command, talkgroup, radio_id);
-  } else if (lcformat == 24) {
-    long offset = 250000L * (((hexdata[0] << 6) & 0x07) | (talkgroup >> 18));
-    unsigned long base_freq = 5 * (((talkgroup & 0xff) << 24UL) | radio_id);
-    printf ("LCW: Channel Identifier Update: Id: %u, Frequency: %lu%ld, Bandwidth: %ukHz, Channel Spacing: %ukHz\n",
-            ((hexdata[0] >> 12) & 0x0f), base_freq, -offset, (((hexdata[0] >> 3) & 0x1ff) >> 3), ((talkgroup >> 8) & 0x3ff));
-  } else if (lcformat == 25) {
-    long offset = 250000LL * (((hexdata[0] << 6) & 0x3fff) | (talkgroup >> 18));
-    unsigned long base_freq = 5LL * (((talkgroup & 0xff) << 24UL) | radio_id);
-    printf ("LCW: Channel Identifier Update: Id: %u, Frequency: %lu%ld, Bandwidth: %ukHz, Channel Spacing: %ukHz\n",
-            ((hexdata[0] >> 12) & 0x0f), base_freq, -offset, (((hexdata[0] >> 8) & 0x0f) >> 3), ((talkgroup >> 8) & 0x3ff));
-  } else if (lcformat == 32) {
-    //request_priority_level = (hexdata[0] & 0x0f);
-    printf ("LCW: System Service Broadcast: Services Available: 0x%06x, Services Supported: 0x%06x\n",
-            talkgroup, radio_id);
-  } else if (lcformat == 33) {
-    unsigned char cctype1 = ((talkgroup & 0x01) ? 'C' : ((talkgroup & 0x02) ? 'U' : 'B')); 
-    unsigned char cctype2 = ((radio_id & 0x01) ? 'C' : ((radio_id & 0x02) ? 'U' : 'B')); 
-    printf ("LCW: Secondary Control Channel Broadcast: RFSSId: 0x%02x, SiteId: 0x%02x:"
-            "Channel A: 0x%02x/0x%06x ControlChannel(%c): %c%c%c%c -> Channel B: 0x%02x/0x%06x ControlChannel(%c): %c%c%c%c\n",
-            ((hexdata[0] >> 8) & 0xff), ((hexdata[0] >> 0) & 0xff),
-            (talkgroup >> 2), ((talkgroup >> 8) & 0x0fff), cctype1,
-            ((talkgroup & 0x10) ? 'A' : ' '), ((talkgroup & 0x20) ? 'D' : ' '),
-            ((talkgroup & 0x40) ? 'R' : ' '), ((talkgroup & 0x80) ? 'V' : ' '),
-            (radio_id >> 2), ((radio_id >> 8) & 0x0fff), cctype2,
-            ((radio_id & 0x10) ? 'A' : ' '), ((radio_id & 0x20) ? 'D' : ' '),
-            ((radio_id & 0x40) ? 'R' : ' '), ((radio_id & 0x80) ? 'V' : ' '));
-  } else if ((lcformat == 34) || (lcformat == 35) || (lcformat == 39) || (lcformat == 40)) {
-    unsigned char cctype2 = ((radio_id & 0x01) ? 'C' : ((radio_id & 0x02) ? 'U' : 'B')); 
-    printf ("LCW: RFSS or Adjacent Site Broadcast%s: Location Registration Area: 0x%02x, System: 0x%03x,"
-            "     Site: RFSSId: 0x%02x, SiteId: 0x%02x, Channel: 0x%02x/0x%06x ControlChannel(%c): %c%c%c%c\n",
-            ((lcformat > 35) ? " (Explicit) " : ""), ((hexdata[0] >> 8) & 0xff),
-            (((hexdata[0] & 0x0f) << 8) | (talkgroup >> 16)),
-            ((talkgroup >> 8) & 0xff), ((talkgroup >> 0) & 0xff), (radio_id >> 20),
-            ((radio_id >> 8) & 0x0fff), cctype2,
-            ((radio_id & 0x10) ? 'A' : ' '), ((radio_id & 0x20) ? 'D' : ' '),
-            ((radio_id & 0x40) ? 'R' : ' '), ((radio_id & 0x80) ? 'V' : ' '));
-  } else if (lcformat == 36) {
-    unsigned char cctype2 = ((radio_id & 0x01) ? 'C' : ((radio_id & 0x02) ? 'U' : 'B')); 
-    printf ("LCW: Network Status Update: NetworkID: %u, SystemID: %u Channel: 0x%02x/0x%06x ControlChannel(%c): %c%c%c%c\n",
-            (((hexdata[0] & 0xff) << 12) | (talkgroup >> 12)), (talkgroup & 0x0fff),
-            (radio_id >> 20), ((radio_id >> 8) & 0x0fff), cctype2,
-            ((radio_id & 0x10) ? 'A' : ' '), ((radio_id & 0x20) ? 'D' : ' '),
-            ((radio_id & 0x40) ? 'R' : ' '), ((radio_id & 0x80) ? 'V' : ' '));
-  } else if (lcformat == 41) {
-    printf ("LCW: Network Status Update (Explicit): NetworkID: %u, SystemID: %u"
-            "RX Channel: 0x%02x/0x%06x TX Channel: 0x%02x/0x%06x\n",
-            (((hexdata[0] & 0xffff) << 4) | (talkgroup >> 12)), ((talkgroup >> 8) & 0x0fff),
-            ((radio_id >> 12) & 0x0f), (radio_id & 0x0fff),
-            ((talkgroup >> 4) & 0x0f), (((talkgroup & 0x0f) << 8) | (radio_id >> 16)));
-  } else  {
-    printf ("LCW: Unknown (lcformat: 0x%02x), hexdump: 0x%04x, 0x%06x, 0x%06x\n",
-            lcformat, hexdata[0], hexdata[1], hexdata[2]);
-  }
-}
-
 static void
-processLDU1 (dsd_opts* opts, dsd_state* state)
+processLDU1 (dsd_opts* opts, dsd_state* state, char *outstr, unsigned int outlen)
 {
   // extracts IMBE frames from LDU frame
-  unsigned char mfid = 0, lcformat = 0;
   unsigned int i, lsd1 = 0, lsd2 = 0;
-  unsigned int hex_data[3];    // Data in hex-words (6 bit words), stored packed in groups of four, in a uint32_t
+  unsigned int lcinfo[3];    // Data in hex-words (6 bit words), stored packed in groups of four, in a uint32_t
   unsigned char lsd[16];
+  unsigned char mfid;
   int status_count;
 
   // we skip the status dibits that occur every 36 symbols
@@ -622,19 +471,19 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 2
-  hex_data[0] = read_and_correct_hex_word (opts, state, &status_count);
+  lcinfo[0] = read_and_correct_hex_word (opts, state, &status_count);
 
   // IMBE 3
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 3
-  hex_data[1] = read_and_correct_hex_word (opts, state, &status_count);
+  lcinfo[1] = read_and_correct_hex_word (opts, state, &status_count);
 
   // IMBE 4
   process_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 4
-  hex_data[2] = read_and_correct_hex_word (opts, state, &status_count);
+  lcinfo[2] = read_and_correct_hex_word (opts, state, &status_count);
 
   // IMBE 5
   process_IMBE (opts, state, &status_count);
@@ -669,7 +518,6 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
 
   p25_lsd_cyclic1685_decode(&lsd1);
   p25_lsd_cyclic1685_decode(&lsd2);
-  printf ("lsd1: 0x%02x, lsd2: 0x%02x\n", lsd1, lsd2);
   // TODO: do something useful with the LSD bytes...
 
   // IMBE 9
@@ -678,20 +526,16 @@ processLDU1 (dsd_opts* opts, dsd_state* state)
   // trailing status symbol
   getDibit (opts, state);
 
-  state->talkgroup = ((hex_data[1] << 8) | (hex_data[2] >> 24));
-  state->radio_id = (hex_data[2] & 0x00ffffff);
+  state->talkgroup = (lcinfo[1] & 0xFFFF);
+  state->radio_id = lcinfo[2];
 
-  lcformat  = (hex_data[0] & 0xFF);
-  mfid  = ((hex_data[0] >> 8) & 0xFF);
-  if (opts->errorbars == 1) {
-      printf ("LDU1: e: %u, talkgroup: %u, src: %u, mfid: %s (%u), lcformat: 0x%02x, lcinfo: 0x%02x 0x%06x 0x%06x\n",
-              state->errs2, state->talkgroup, state->radio_id, mfids[mfid_mapping[mfid&0x3f]], mfid, lcformat,
-              (hex_data[0] >> 16), hex_data[1], hex_data[2]);
-      decode_lcf(state, hex_data);
-  }
+  mfid  = ((lcinfo[0] >> 10) & 0xFF);
+  snprintf(outstr, outlen, "LDU1: e: %u, mfid: %s (%u), talkgroup: %u, src: %u, lsd: 0x%02x/0x%02x",
+          state->errs2, mfids[mfid_mapping[mfid&0x3f]], mfid, state->talkgroup, state->radio_id, lsd1, lsd2);
+  decode_p25_lcf(lcinfo);
 }
 
-static void
+static unsigned int 
 processLDU2 (dsd_opts * opts, dsd_state * state)
 {
   // extracts IMBE frames from LDU frame
@@ -758,6 +602,8 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
 
   p25_lsd_cyclic1685_decode(&lsd1);
   p25_lsd_cyclic1685_decode(&lsd2);
+  //state->p25lsd1 = lsd1;
+  //state->p25lsd2 = lsd2;
   // TODO: do something useful with the LSD bytes...
 
   // IMBE 9
@@ -766,10 +612,7 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   // trailing status symbol
   getDibit (opts, state);
 
-  if (opts->errorbars == 1) {
-    printf ("LDU2: e: %u, lsd1: 0x%02x, lsd2: 0x%02x\n",
-            state->errs2, lsd1, lsd2);
-  }
+  return state->errs2;
 }
 
 static void
@@ -786,14 +629,14 @@ processTDU (dsd_opts* opts, dsd_state* state)
     getDibit (opts, state);
 }
 
-static void
+static unsigned char 
 processTDULC (dsd_opts* opts, dsd_state* state)
 {
   unsigned int j, corrected_hexword = 0;
   unsigned char hex_and_parity[12];
-  unsigned char lcformat = 0, mfid = 0;
   unsigned int lcinfo[3];
   unsigned int dodeca_data[6];    // Data in 12-bit words. A total of 6 words.
+  unsigned char mfid;
   int status_count;
 
   // we skip the status dibits that occur every 36 symbols
@@ -829,13 +672,9 @@ processTDULC (dsd_opts* opts, dsd_state* state)
   lcinfo[2]  = (dodeca_data[1]);
   lcinfo[2] |= (dodeca_data[0] << 12);
 
-  lcformat  = (lcinfo[0] & 0xFF);
-  mfid  = ((lcinfo[0] >> 8) & 0xFF);
-
-  if (opts->errorbars == 1) {
-      printf ("mfid: %u, lcformat: 0x%02x, lcinfo: 0x%06x 0x%06x 0x%06x\n", mfid, lcformat, lcinfo[0], lcinfo[1], lcinfo[2]);
-      decode_lcf(state, lcinfo);
-  }
+  mfid  = ((lcinfo[0] >> 10) & 0xFF);
+  decode_p25_lcf(lcinfo);
+  return mfid;
 }
 
 static unsigned int
@@ -882,13 +721,12 @@ trellis_1_2_decode(uint8_t *in, uint32_t in_sz, uint8_t *out)
          }
       }
       if(m != 1) {
-        printf("Error: decoding error at offset %u\n", i);
-        return 0;
+        return i;
       }
       state = ns;
       out[i] = state;
    }
-   return 1;
+   return 0;
 }
 
 /* Symbol interleaving, derived from CAI specification table 7.4
@@ -913,7 +751,7 @@ static void
 processTSBK(unsigned char raw_dibits[98], unsigned char out[12], int *status_count)
 {
   unsigned char trellis_buffer[49];
-  unsigned int i;
+  unsigned int i, opcode = 0, err = 0;
 
   for (i = 0; i < 49; i++) {
     unsigned int k = INTERLEAVING[i];
@@ -925,17 +763,24 @@ processTSBK(unsigned char raw_dibits[98], unsigned char out[12], int *status_cou
     raw_dibits[49] = 0;
   }
 
-  trellis_1_2_decode(trellis_buffer, 49, raw_dibits); /* raw_dibits actually has decoded dibits here! */
+  err = trellis_1_2_decode(trellis_buffer, 49, raw_dibits); /* raw_dibits actually has decoded dibits here! */
 
   for(i = 0; i < 12; ++i) {
     out[i] = ((raw_dibits[4*i] << 6) | (raw_dibits[4*i+1] << 4) | (raw_dibits[4*i+2] << 2) | (raw_dibits[4*i+3] << 0));
+  }
+
+  opcode = (out[0] & 0x3f);
+  if (err) {
+    printf("TSBK: mfid: 0x%02x, lb: %u, opcode: 0x%02x, err: trellis decode failed, offset: %u\n", out[1], (out[0] >> 7), opcode, err);
+  } else {
+    printf("TSBK: mfid: 0x%02x, lb: %u, opcode: 0x%02x\n", out[1], (out[0] >> 7), opcode);
   }
 }
 
 static void
 processTSDU(dsd_opts* opts, dsd_state* state)
 {
-  unsigned char last_block = 0, opcode = 0;
+  unsigned char last_block = 0;
   unsigned char raw_dibits[98];
   unsigned char out[12];
   int status_count;
@@ -949,17 +794,16 @@ processTSDU(dsd_opts* opts, dsd_state* state)
     read_dibit(opts, state, raw_dibits, 98, &status_count);
     processTSBK(raw_dibits, out, &status_count);
     last_block = (out[0] >> 7);
-    opcode = (out[0] & 0x3f);
-    printf("TSDU: lb: %u, opcode: 0x%02x, mfid: 0x%02x\n", last_block, opcode, out[1]);
   }
 
   // trailing status symbol
   getDibit (opts, state);
 }
 
-void process_p25_frame(dsd_opts *opts, dsd_state *state)
+void process_p25_frame(dsd_opts *opts, dsd_state *state, char *tmpStr, unsigned int tmpLen)
 {
   unsigned char duid = state->duid;
+  unsigned int mfid = 0, errs2 = 0;
 
   if ((duid == 5) || ((duid == 10) && (state->lastp25type == 1))) {
       if ((opts->mbe_out_dir[0] != 0) && (opts->mbe_out_fd == -1)) {
@@ -971,19 +815,22 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state)
   if (duid == 0) {
       // Header Data Unit
       state->lastp25type = 2;
-      processHDU (opts, state);
+      mfid = processHDU (opts, state);
+      snprintf(tmpStr, 1023, "HDU: mfid: %s (%u), talkgroup: %u",
+               mfids[mfid_mapping[(mfid>>2)&0x3f]], mfid, state->talkgroup);
   } else if (duid == 5) { // 11 -> 0101 = 5
       // Logical Link Data Unit 1
       state->lastp25type = 1;
-      processLDU1 (opts, state);
+      processLDU1 (opts, state, tmpStr, 1023);
   } else if (duid == 10) { // 22 -> 1010 = 10
       // Logical Link Data Unit 2
       if (state->lastp25type != 1) {
-          printf("Ignoring LDU2 not preceeded by LDU1\n");
+          snprintf(tmpStr, 1023, "Ignoring LDU2 not preceeded by LDU1");
           state->lastp25type = 0;
       } else {
           state->lastp25type = 2;
-          processLDU2 (opts, state);
+          errs2 = processLDU2 (opts, state);
+          snprintf(tmpStr, 1023, "LDU2: e: %u", errs2);
       }
   } else if ((duid == 3) || (duid == 15)) {
       if (opts->mbe_out_dir[0] != 0) {
@@ -996,14 +843,17 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state)
       if (duid == 3) {
         // Terminator without subsequent Link Control
         processTDU (opts, state);
+        snprintf(tmpStr, 1023, "TDU");
       } else {
         // Terminator with subsequent Link Control
-        processTDULC (opts, state);
+        unsigned char mfid = processTDULC (opts, state);
+        snprintf(tmpStr, 1023, "TDULC: mfid: %s (%u)", mfids[mfid_mapping[mfid&0x3f]], mfid);
       }
   } else if (duid == 7) { // 13 -> 0111 = 7
       state->talkgroup = 0;
       state->lastp25type = 3;
       processTSDU (opts, state);
+      snprintf(tmpStr, 1023, "TSDU");
   // try to guess based on previous frame if unknown type
   } else if (state->lastp25type == 1) { 
       if ((opts->mbe_out_dir[0] != 0) && (opts->mbe_out_fd == -1)) {
@@ -1012,8 +862,8 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state)
       //state->lastp25type = 0;
       // Guess that the state is LDU2
       state->lastp25type = 2;
-      printf("(LDU2)\n");
-      processLDU2 (opts, state);
+      errs2 = processLDU2 (opts, state);
+      snprintf(tmpStr, 1023, "(LDU2): e: %u", errs2);
   } else if (state->lastp25type == 2) {
       if ((opts->mbe_out_dir[0] != 0) && (opts->mbe_out_fd == -1)) {
           openMbeOutFile (opts, state);
@@ -1021,18 +871,18 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state)
       //state->lastp25type = 0;
       // Guess that the state is LDU1
       state->lastp25type = 1;
-      printf("(LDU1)\n");
-      processLDU1 (opts, state);
+      //printf("(LDU1)\n");
+      processLDU1 (opts, state, tmpStr, 1023);
   } else if (state->lastp25type == 3) {
       //state->lastp25type = 0;
       // Guess that the state is TSDU
       state->lastp25type = 3;
-      printf("(TSDU)\n");
       processTSDU (opts, state);
       //skipDibit (opts, state, 328-25);
+      snprintf(tmpStr, 1023, "(TSDU)");
   } else { 
       state->lastp25type = 0;
-      printf ("Unknown DUID: 0x%x\n", duid);
+      snprintf(tmpStr, 1023, "Unknown DUID");
   }
 }
 
