@@ -112,6 +112,12 @@ static unsigned char cach_deinterleave[24] = {
     18, 19,  5, 20, 21, 22,  6, 23
 }; 
 
+static unsigned char hamming7_4_encode[16] =
+{
+    0x00, 0x0b, 0x16, 0x1d, 0x27, 0x2c, 0x31, 0x3a,
+    0x45, 0x4e, 0x53, 0x58, 0x62, 0x69, 0x74, 0x7f
+};
+
 static unsigned char hamming7_4_decode[64] =
 {
     0x00, 0x01, 0x08, 0x24, 0x01, 0x11, 0x53, 0x91, 
@@ -158,8 +164,7 @@ void Hamming15_11_3_Correct(unsigned int *block)
       codeword ^= Hamming15113Table[syndrome & 0x0f];
     }
 
-    *block = codeword;
-    //*block = (codeword >> 4);
+    *block = (codeword >> 4);
 }
 
 static const char hex[]="0123456789abcdef";
@@ -378,9 +383,9 @@ static void ProcessBPTC(unsigned char infodata[196], unsigned char payload[97])
       codeword |= data_fr[j * 15 + i];
     }
     Hamming15_11_3_Correct(&codeword);
-    codeword &= 0x1fff;
-    for (j = 0; j < 13; j++) {
-      data_fr[j * 15 + i] = ((codeword >> (12 - j)) & 1);
+    codeword &= 0x1ff;
+    for (j = 0; j < 9; j++) {
+      data_fr[j * 15 + i] = ((codeword >> (8 - j)) & 1);
     }
   }
   for (j = 0; j < 9; j++) {
@@ -390,7 +395,6 @@ static void ProcessBPTC(unsigned char infodata[196], unsigned char payload[97])
         codeword |= data_fr[j * 15 + i];
     }
     Hamming15_11_3_Correct(&codeword);
-    codeword >>= 4;
     for (i = 0; i < 11; i++) {
         data_fr[j * 15 + 10 - i] = ((codeword >> i) & 1);
     }
@@ -500,7 +504,7 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   golay_codeword |= *dibit_p++;
 
   // signaling data or sync
-  if ((state->lastsynctype & ~1) == 12) {
+  if ((state->lastsynctype & ~1) == 4) {
       if (state->currentslot == 0) {
           strcpy (state->slot0light, "[slot0]");
       } else {
