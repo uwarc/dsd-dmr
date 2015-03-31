@@ -135,7 +135,7 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
           } else {
               strcpy (state->slot1light, "[slot1]");
           }
-      } else if ((state->lastsynctype & ~1) == 4) {
+      } else if ((state->lastsynctype & ~1) == 14) {
           mutecurrentslot = 0;
           if (state->currentslot == 0) {
               strcpy (state->slot0light, "[SLOT0]");

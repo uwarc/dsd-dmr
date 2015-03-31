@@ -156,18 +156,18 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
           unsigned int emb_field = 0;
           for (i = 0; i < 4; i++) {
               dibit = getDibit (opts, state);
-              sync[i] = (dibit | 1) + 48;
+              sync[i] = (dibit | 1) + 0x30;
               emb_field <<= 2;
               emb_field |= dibit;
           }
           for (i = 0; i < 16; i++) {
               dibit = getDibit (opts, state);
-              sync[i+4] = (dibit | 1) + 48;
+              sync[i+4] = (dibit | 1) + 0x30;
               syncdata[i] = dibit;
           }
           for (i = 20; i < 24; i++) {
               dibit = getDibit (opts, state);
-              sync[i] = (dibit | 1) + 48;
+              sync[i] = (dibit | 1) + 0x30;
               emb_field <<= 2;
               emb_field |= dibit;
           }
@@ -185,14 +185,14 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
 #endif
       }
 
-      if ((state->lastsynctype & ~1) == 10) {
+      if ((state->lastsynctype & ~1) == 4) { // Data frame
           mutecurrentslot = 1;
           if (state->currentslot == 0) {
               strcpy (state->slot0light, "[slot0]");
           } else {
               strcpy (state->slot1light, "[slot1]");
           }
-      } else if ((state->lastsynctype & ~1) == 12) {
+      } else if ((state->lastsynctype & ~1) == 12) { // Voice frame
           mutecurrentslot = 0;
           if (state->currentslot == 0) {
               strcpy (state->slot0light, "[SLOT0]");
@@ -247,7 +247,7 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
       // signaling data or sync
       for (i = 0; i < 24; i++) {
           dibit = getDibit (opts, state);
-          sync[i] = (dibit | 1) + 48;
+          sync[i] = (dibit | 1) + 0x30;
       }
       sync[24] = 0;
 
