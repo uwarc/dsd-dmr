@@ -26,15 +26,13 @@ invert_dibit(unsigned int dibit)
 static unsigned int digitize (dsd_state* state, int symbol)
 {
   // determine dibit state
-  if ((state->synctype == 6) || (state->synctype == 7) ||
-      (state->synctype == 14) || (state->synctype == 15) || 
-      (state->synctype == 18) || (state->synctype == 19)) {
-      //  6 +D-STAR
-      //  7 -D-STAR
-      // 14 +ProVoice
-      // 15 -ProVoice
-      // 18 +D-STAR_HD
-      // 19 -D-STAR_HD
+  if (((state->synctype >> 1) == 4) || ((state->synctype >> 1) == 5) || ((state->synctype >> 1) == 9)) {
+      //  8 +D-STAR
+      //  9 -D-STAR
+      // 10 +D-STAR_HD
+      // 11 -D-STAR_HD
+      // 18 +ProVoice
+      // 19 -ProVoice
       unsigned int dibit;
       if (symbol > state->center) {
         dibit = 0;
@@ -51,16 +49,16 @@ static unsigned int digitize (dsd_state* state, int symbol)
       //  1 -P25p1
       //  2 +X2-TDMA (non inverted signal data frame)
       //  3 -X2-TDMA (inverted signal data frame)
-      //  4 +X2-TDMA (non inverted signal voice frame)
-      //  5 -X2-TDMA (inverted signal voice frame)
-      //  8 +NXDN (non inverted voice frame)
-      //  9 -NXDN (inverted voice frame)
-      // 10 +DMR (non inverted signal data frame)
-      // 11 -DMR (inverted signal data frame)
+      //  4 +DMR (non inverted signal data frame)
+      //  5 -DMR (inverted signal data frame)
+      //  6 +NXDN (non inverted data frame)
+      //  7 -NXDN (inverted data frame)
       // 12 +DMR (non inverted signal voice frame)
       // 13 -DMR (inverted signal voice frame)
-      // 16 +NXDN (non inverted data frame)
-      // 17 -NXDN (inverted data frame)
+      // 14 +X2-TDMA (non inverted signal voice frame)
+      // 15 -X2-TDMA (inverted signal voice frame)
+      // 16 +NXDN (non inverted voice frame)
+      // 17 -NXDN (inverted voice frame)
       unsigned int dibit;
 
       // Choose the symbol according to the regions delimited by center, umid and lmid
