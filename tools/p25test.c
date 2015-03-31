@@ -112,9 +112,6 @@ int main(int argc, char **argv)
 
   opts.errorbars = 1;
   opts.verbose = 9001;
-  opts.p25enc = 1;
-  opts.p25status = 1;
-  opts.p25tg = 1;
   opts.mbe_out_dir[0] = 0;
   opts.mbe_out_path[0] = 0;
   opts.mbe_out_fd = -1;
