@@ -30,13 +30,11 @@ int bchDec(uint64_t cw, uint16_t *cw_decoded)
   int CantDecode = 0;
 
   for (i = 0; i < 63; i++) {
-      //Codeword[i] = ((cw >> (62-i)) & 1);
       Codeword[i] = ((cw >> (i+1)) & 1);
   }
 
   for(i = 1; i <= 22; i++) {
       S[i] = 0;
-      // FOR j = 0 TO 62
       for(j = 0; j < 63; j++) {
          if(Codeword[j]) {
             S[i] ^= bchGFexp[(i * j) % 63];
@@ -52,7 +50,6 @@ int bchDec(uint64_t cw, uint16_t *cw_decoded)
   if(SynError) { //if there are errors, try to correct them
       L[0] = 0; uLu[0] = -1; D[0] = 0;    elp[0][ 0] = 0;
       L[1] = 0; uLu[1] = 0;  D[1] = S[1]; elp[1][ 0] = 1;
-      //FOR i = 1 TO 21
       for(i = 1; i <= 21; i++) {
          elp[0][ i] = -1; elp[1][ i] = 0;
       }
@@ -60,9 +57,8 @@ int bchDec(uint64_t cw, uint16_t *cw_decoded)
 
       do {
          U = U + 1;
-         if( D[U] == -1) {
+         if(D[U] == -1) {
             L[U + 1] = L[U];
-            // FOR i = 0 TO L[U]
             for(i = 0; i <= L[U]; i++) {
                elp[U + 1][ i] = elp[U][ i]; elp[U][ i] = bchGFlog[elp[U][ i]];
             }
@@ -75,7 +71,7 @@ int bchDec(uint64_t cw, uint16_t *cw_decoded)
                j = q;
                do {
                   j = j - 1; if((D[j] != -1) &&(uLu[q] < uLu[j])) { q = j; }
-               } while( j > 0);
+               } while(j > 0);
             }
 
             //store degree of new elp polynomial
@@ -86,17 +82,14 @@ int bchDec(uint64_t cw, uint16_t *cw_decoded)
             }
 
             ///* form new elp(x) */
-            // FOR i = 0 TO 21
             for(i = 0; i <= 21; i++) {
                elp[U + 1][ i] = 0;
             }
-            // FOR i = 0 TO L(q)
             for(i = 0; i <= L[q]; i++) {
-               if( elp[q][ i] != -1) {
+               if(elp[q][ i] != -1) {
                   elp[U + 1][ i + U - q] = bchGFexp[(D[U] + 63 - D[q] + elp[q][ i]) % 63];
                }
             }
-            // FOR i = 0 TO L(U)
             for(i = 0; i <= L[U]; i++) {
                elp[U + 1][ i] = elp[U + 1][ i] ^ elp[U][ i];
                elp[U][ i] = bchGFlog[elp[U][ i]];
@@ -108,7 +101,6 @@ int bchDec(uint64_t cw, uint16_t *cw_decoded)
          if(U < 22) {
             //no discrepancy computed on last iteration
             if( S[U + 1] != -1) { D[U + 1] = bchGFexp[S[U + 1]]; } else { D[U + 1] = 0; }
-            // FOR i = 1 TO L(U + 1)
             for(i = 1; i <= L[U + 1]; i++) {
                if((S[U + 1 - i] != -1) &&(elp[U + 1][ i] != 0)) {
                   D[U + 1] = D[U + 1] ^ bchGFexp[(S[U + 1 - i] + bchGFlog[elp[U + 1][ i]]) % 63];
@@ -122,24 +114,20 @@ int bchDec(uint64_t cw, uint16_t *cw_decoded)
       U = U + 1;
       if(L[U] <= 11) { // /* Can correct errors */
          //put elp into index form
-         // FOR i = 0 TO L[U]
          for(i = 0; i <= L[U]; i++) {
             elp[U][ i] = bchGFlog[elp[U][ i]];
          }
 
          //Chien search: find roots of the error location polynomial
-         // FOR i = 1 TO L(U)
          for(i = 1; i <= L[U]; i++) {
             reg[i] = elp[U][ i];
          }
          count = 0;
-         // FOR i = 1 TO 63
          for(i = 1; i <= 63; i++) {
             q = 1;
-            //FOR j = 1 TO L(U)
             for(j = 1; j <= L[U]; j++) {
-               if( reg[j] != -1) {
-                  reg[j] =(reg[j] + j) % 63; q = q ^ bchGFexp[reg[j]];
+               if(reg[j] != -1) {
+                  reg[j] = (reg[j] + j) % 63; q = q ^ bchGFexp[reg[j]];
                }
             }
             if(q == 0) { //store root and error location number indices
@@ -148,7 +136,6 @@ int bchDec(uint64_t cw, uint16_t *cw_decoded)
          }
          if(count == L[U]) {
             //no. roots = degree of elp hence <= t errors
-            //FOR i = 0 TO L[U] - 1
             for(i = 0; i <= L[U]-1; i++) {
                Codeword[locn[i]] = Codeword[locn[i]] ^ 1;
             }
