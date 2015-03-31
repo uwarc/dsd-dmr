@@ -18,13 +18,18 @@
 #include "dsd.h"
 #define SCOPERATE 1
 
-static const char *modulations[3] = { "C4FM", "QPSK", "GFSK" };
+static const char *modulations[2] = { "GFSK", "QPSK" };
 
+/* Note: okay to hardcode samples/symbol for now, but this will need changing when:
+ *       p25p2 support gets added
+ *       provoice support gets re-added (assuming that ever happens)
+ */
 void print_datascope(dsd_state *state, int *lbuf2, unsigned int lsize)
 {
     static const char *separator = "+----------------------------------------------------------------+\n";
-    int i, j, o;
+    char tmpbuf[1024];
     char spectrum[64];
+    int i, j, o, tmplen;
 
     for (i = 0; i < 64; i++) {
         spectrum[i] = 0;
@@ -36,10 +41,9 @@ void print_datascope(dsd_state *state, int *lbuf2, unsigned int lsize)
     }
     if (state->symbolcnt > (4800 / SCOPERATE)) {
         state->symbolcnt = 0;
-        write(1, "\033[14A", 5);
-        printf ("\nDemod mode: %s, Min: %d, Max: %d, LMid: %d, UMid: %d, Center: %d, Symbol_Rate: %d\n",
-                modulations[state->rf_mod], state->min, state->max, state->lmid, state->umid, state->center,
-                state->samplesPerSymbol);
+        tmplen = snprintf(tmpbuf, 1023, "\033[14A\nDemod mode: %s, Min: %d, Max: %d, LMid: %d, UMid: %d, Center: %d, Symbol_Rate: 10\n",
+                          modulations[state->rf_mod & 1], state->min, state->max, state->lmid, state->umid, state->center);
+        write(1, tmpbuf, tmplen);
         write(1, separator, 67);
         for (i = 0; i < 10; i++) {
             char buf[67];
