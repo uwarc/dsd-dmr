@@ -185,14 +185,14 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
 #endif
       }
 
-      if ((state->lastsynctype & ~1) == 4) { // Data frame
+      if ((state->lastsynctype >> 1) == 2) { // Data frame
           mutecurrentslot = 1;
           if (state->currentslot == 0) {
               strcpy (state->slot0light, "[slot0]");
           } else {
               strcpy (state->slot1light, "[slot1]");
           }
-      } else if ((state->lastsynctype & ~1) == 12) { // Voice frame
+      } else if ((state->lastsynctype >> 1) == 6) { // Voice frame
           mutecurrentslot = 0;
           if (state->currentslot == 0) {
               strcpy (state->slot0light, "[SLOT0]");
