@@ -45,7 +45,14 @@
 /*
  * global variables
  */
-int exitflag;
+extern int exitflag;
+
+#ifndef FFTCOMPLEX_T_DEFINED
+typedef struct FFTComplex {
+    float re, im;
+} FFTComplex;
+#define FFTCOMPLEX_T_DEFINED
+#endif
 
 typedef struct _WAVHeader {
     uint32_t pad0;
@@ -64,9 +71,6 @@ typedef struct
 {
   int errorbars;
   unsigned int verbose;
-  unsigned int p25status;
-  unsigned int p25tg;
-  unsigned int p25enc;
   unsigned int datascope;
   int audio_in_fd;
   unsigned char audio_in_type; // 0 for device, 1 for file, 2 for portaudio
@@ -98,11 +102,12 @@ typedef struct
   float d_symbol_spread;
   float d_symbol_time;
   float fine_frequency_correction;
+  float input_gain;
 
   unsigned char dibit_buf[48000];
   unsigned char *dibit_buf_p;
-  short inbuffer[4608];
-  float inbuffer2[4608];
+  FFTComplex prev;
+  float inbuffer[4608];
   unsigned int inbuf_pos;
 
   unsigned int inbuf_size;
@@ -129,8 +134,8 @@ typedef struct
   unsigned int radio_id;
   unsigned short nac;
   unsigned char duid;
-  unsigned int numtdulc;
   int errs2;
+  unsigned char p25enc;
   unsigned char firstframe;
   unsigned char dmrMsMode;
   char slot0light[8];
@@ -146,9 +151,6 @@ typedef struct
 
   unsigned int debug_audio_errors;
   unsigned int debug_header_errors;
-
-  // Last dibit read
-  int last_dibit;
 
   unsigned int p25_bit_count;
   unsigned int p25_bit_error_count;
@@ -248,19 +250,22 @@ void cleanupAndExit (dsd_opts * opts, dsd_state * state);
 void sigfun (int sig);
 void processAMBEFrame (dsd_opts * opts, dsd_state * state, char ambe_fr[4][24]);
 void processIMBEFrame (dsd_opts * opts, dsd_state * state, char imbe_d[88]);
+void process_IMBE (dsd_opts* opts, dsd_state* state, char imbe_fr[8][23]);
 int getSymbol (dsd_opts * opts, dsd_state * state, int have_sync);
+float dsd_gen_root_raised_cosine(float sampling_freq, float symbol_rate);
 void processEmb (dsd_state *state, unsigned char lcss, unsigned char emb_fr[4][32]);
 void processDMRdata (dsd_opts * opts, dsd_state * state);
-void processNXDNData (dsd_opts * opts, dsd_state * state);
 unsigned int processDMRvoice (dsd_opts * opts, dsd_state * state);
 unsigned int processNXDNVoice (dsd_opts * opts, dsd_state * state);
 unsigned int processX2TDMAvoice (dsd_opts * opts, dsd_state * state);
 unsigned int processDSTAR (dsd_opts * opts, dsd_state * state);
 unsigned int processDSTAR_HD (dsd_opts * opts, dsd_state * state);
-void process_p25_frame(dsd_opts *opts, dsd_state *state);
+int bchDec(uint64_t cw, uint16_t *cw_decoded);
+uint64_t bchEnc(uint16_t in_word);
+void process_p25_frame(dsd_opts *opts, dsd_state *state, char *tmpStr, unsigned int tmpLen);
 float get_p25_ber_estimate (dsd_state* state);
 float dmr_filter(dsd_state *state, float sample);
-float nxdn_filter(dsd_state *state, float sample);
+unsigned int decode_p25_lcf(unsigned int lcinfo[3], char *strbuf);
 unsigned int dsd_div32(unsigned int num, unsigned int den, unsigned int *rem);
 
 void ReedSolomon_36_20_17_encode(ReedSolomon *rs, unsigned char* hex_data, unsigned char* out_hex_parity);

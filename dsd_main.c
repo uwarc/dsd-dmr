@@ -17,6 +17,7 @@
 
 #include "dsd.h"
 #include <sys/mman.h>
+int exitflag;
 
 #ifndef NO_REEDSOLOMON
 /* specify irreducible polynomial coeffts */
@@ -103,7 +104,6 @@ noCarrier (dsd_opts * opts, dsd_state * state)
   state->talkgroup = 0;
   state->radio_id = 0;
   state->lastp25type = 0;
-  state->numtdulc = 0;
   strcpy (state->slot0light, " slot0 ");
   strcpy (state->slot1light, " slot1 ");
   state->firstframe = 0;
@@ -114,9 +114,6 @@ static inline void initOpts (dsd_opts * opts)
   opts->errorbars = 1;
   opts->datascope = 0;
   opts->verbose = 2;
-  opts->p25enc = 0;
-  opts->p25status = 0;
-  opts->p25tg = 0;
   opts->audio_in_fd = -1;
   opts->audio_in_format = 0;
   opts->mbe_out_dir[0] = 0;
@@ -159,6 +156,7 @@ static void initState (dsd_state * state)
   state->d_symbol_spread = 2.0f; // nominal symbol spread of 2.0 gives outputs at -3, -1, +1, +3
   state->d_symbol_time = (1.0f / (float)state->samplesPerSymbol);
   state->fine_frequency_correction = 0.0f;
+  state->input_gain = 1.0f;
   for (i = 0; i <= FSK4_NTAPS; i++) {
       state->d_history[i] = 0.0f;
   }
@@ -173,7 +171,7 @@ static void initState (dsd_state * state)
   state->offset = 0;
   state->talkgroup = 0;
   state->radio_id = 0;
-  state->numtdulc = 0;
+  state->p25enc = 0;
   state->errs2 = 0;
   state->firstframe = 0;
   strcpy (state->slot0light, " slot0 ");
@@ -284,6 +282,7 @@ main (int argc, char **argv)
   extern char *optarg;
   extern int optind, opterr, optopt;
   char *audio_in_dev = NULL;
+  unsigned int Fs = 48000;
   dsd_opts opts;
   dsd_state state;
   char versionstr[25];
@@ -311,7 +310,7 @@ main (int argc, char **argv)
   //rs6_init(&state.ReedSolomon_36_20_17, generator_polynomial_p25, 8);
 #endif
 
-  while ((c = getopt (argc, argv, "hep:qv:si:t:d:g:nw:B:C:R:f:u:x:S:A:M:")) != -1)
+  while ((c = getopt (argc, argv, "hep:qv:si:t:d:g:nw:B:C:r:f:u:x:S:A:M:")) != -1)
     {
       opterr = 0;
       switch (c)
@@ -321,15 +320,6 @@ main (int argc, char **argv)
           exit (0);
         case 'e':
           opts.errorbars = 1;
-          break;
-        case 'p':
-          if (optarg[0] == 'e') {
-              opts.p25enc = 1;
-          } else if (optarg[0] == 's') {
-              opts.p25status = 1;
-          } else if (optarg[0] == 't') {
-              opts.p25tg = 1;
-          }
           break;
         case 'q':
           opts.errorbars = 0;
@@ -359,6 +349,9 @@ main (int argc, char **argv)
           printf ("Writing mbe data files to directory %s\n", opts.mbe_out_dir);
           break;
         case 'g':
+          state.input_gain = strtod(optarg, NULL);
+          break;
+        case 'A':
           opts.agc_enable = strtoul(optarg, NULL, 10);
           if (!opts.agc_enable) {
               printf ("Disabling audio out gain setting\n");
@@ -377,10 +370,15 @@ main (int argc, char **argv)
           break;
         case 'u':
           opts.uvquality = strtoul(optarg, NULL, 10);
-          if (opts.uvquality > 63) {
-              opts.uvquality = 63;
+          if (opts.uvquality > 15) {
+              opts.uvquality = 15;
           }
           printf ("Setting unvoice speech quality to %i waves per band.\n", opts.uvquality);
+          break;
+        case 'r':
+          Fs = strtoul(optarg, NULL, 10);
+          dsd_gen_root_raised_cosine((float)Fs, 4800.0f);
+          state.d_symbol_time = (4800.0f / (float)Fs);
           break;
         case 'x':
           if (optarg[0] == 'x') {
