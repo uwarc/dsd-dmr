@@ -625,7 +625,6 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
 #ifndef NO_REEDSOLOMON
             unsigned char rs_mask = ((bursttype == 1) ? 0x96 : 0x99);
             unsigned int nerrs = check_and_fix_reedsolomon_12_09_04(&state->ReedSolomon_12_09_04, payload, rs_mask);
-            printf("reedsolomon: nerrs: %u\n", nerrs);
 #endif
             printf("fid: %s (%u)\n", fids[j], fid);
             if ((fid == 0) || (fid == 16)) { // Standard feature, MotoTRBO Capacity+
@@ -750,7 +749,7 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
                 }
                 if (unrecognised_csbk) {
                     hexdump_packet(payload, 12, packetdump);
-                    snprintf(csbkstr, 1023, "lb: %c, id: %u, fid: %s (%u), data: %s\n", (payload[0] >> 7), csbk_id, fids[j], fid, packetdump);
+                    snprintf(csbkstr, 1023, "lb: %c, id: %u, fid: %s (%u), data: %s\n", (payload[0] >> 7)+0x30, csbk_id, fids[j], fid, packetdump);
                 }
                 printf("%s", csbkstr);
             }
@@ -764,7 +763,7 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
                        (((payload[7] << 2) | (payload[8] >> 6)) & 0x3ff), 125 * (((payload[8] & 0x1f) << 8) | payload[9]));
             } else {
                 hexdump_packet(payload, 12, packetdump);
-                printf("Unrecognised appended MBC: lb: %c, data: %s\n", (payload[0] >> 7), packetdump);
+                printf("Unrecognised appended MBC: lb: %c, data: %s\n", (payload[0] >> 7)+0x30, packetdump);
             }
       } else if (bursttype == 6) {
             process_dataheader(payload);
