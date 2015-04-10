@@ -270,7 +270,7 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
         lcinfo[0] = get_uint(infodata, 24);
         lcinfo[1] = get_uint(infodata+24, 24);
         lcinfo[2] = get_uint(infodata+48, 24);
-        decode_p25_lcf(lcinfo);
+        //decode_p25_lcf(lcinfo);
     }
     return total_errs;
 }
