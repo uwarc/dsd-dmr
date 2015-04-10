@@ -151,151 +151,21 @@ skip_dibit(dsd_opts* opts, dsd_state* state, unsigned int count, int* status_cou
     }
 }
 
-static unsigned int mbe_golay2312 (unsigned int in, unsigned int *out)
-{
-  unsigned int i, errs = 0, block = in;
-
-  Golay23_Correct (&block);
-  *out = block;
-
-  in >>= 11;
-  in ^= block;
-  for (i = 0; i < 12; i++) {
-      if ((in >> i) & 1) {
-          errs++;
-      }
-  }
-
-  return (errs);
-}
-
-static void mbe_demodulateImbe7200x4400Data (char imbe[8][23])
-{
-  int i, j = 0, k;
-  unsigned short pr[115], foo = 0;
-
-  // create pseudo-random modulator
-  for (i = 11; i >= 0; i--) {
-      foo <<= 1;
-      foo |= imbe[0][11+i];
-  }
-
-  pr[0] = (16 * foo);
-  for (i = 1; i < 115; i++) {
-      pr[i] = (173 * pr[i - 1]) + 13849 - (65536 * (((173 * pr[i - 1]) + 13849) >> 16));
-  }
-  for (i = 1; i < 115; i++) {
-      pr[i] >>= 15;
-  }
-
-  // demodulate imbe with pr
-  k = 1;
-  for (i = 1; i < 4; i++) {
-      for (j = 22; j >= 0; j--)
-        imbe[i][j] ^= pr[k++];
-  }
-  for (i = 4; i < 7; i++) {
-      for (j = 14; j >= 0; j--)
-        imbe[i][j] ^= pr[k++];
-  }
-}
-
-static int mbe_eccImbe7200x4400Data (char imbe_fr[8][23], char *imbe_d)
-{
-  int i, j = 0, errs = 0;
-  unsigned int hin, gin, gout, block;
-  char *imbe = imbe_d;
-
-  for (j = 11; j >= 0; j--) {
-    *imbe++ = imbe_fr[0][j+11];
-  }
-
-  for (i = 1; i < 4; i++) {
-      gin = 0;
-      for (j = 22; j >= 0; j--) {
-          gin <<= 1;
-          gin |= imbe_fr[i][j];
-      }
-      errs += mbe_golay2312 (gin, &gout);
-      for (j = 0; j < 12; j++) {
-          *imbe++ = ((gout >> j) & 1);
-      }
-  }
-  for (i = 4; i < 7; i++) {
-      hin = 0;
-      for (j = 0; j < 15; j++) {
-          hin <<= 1;
-          hin |= imbe_fr[i][14-j];
-      }
-      block = hin;
-      p25_hamming15_11_3_decode(&block);
-      errs += ((hin >> 4) != block);
-      for (j = 14; j >= 4; j--) {
-          *imbe++ = ((block & 0x0400) >> 10);
-          block = block << 1;
-      }
-  }
-  for (j = 6; j >= 0; j--) {
-      *imbe++ = imbe_fr[7][j];
-  }
-
-  return (errs);
-}
-
-void
-process_IMBE (dsd_opts* opts, dsd_state* state, int* status_count)
+static void read_IMBE (dsd_opts* opts, dsd_state* state, int* status_count)
 {
   unsigned int i, dibit;
   unsigned char imbe_dibits[72];
   char imbe_fr[8][23];
-  const int *w, *x, *y, *z;
-
-  w = iW;
-  x = iX;
-  y = iY;
-  z = iZ;
 
   read_dibit(opts, state, imbe_dibits, 72, status_count);
 
   for (i = 0; i < 72; i++) {
       dibit = imbe_dibits[i];
-      imbe_fr[*w][*x] = (1 & (dibit >> 1)); // bit 1
-      imbe_fr[*y][*z] = (1 & dibit);        // bit 0
-      w++;
-      x++;
-      y++;
-      z++;
+      imbe_fr[iW[i]][iX[i]] = (1 & (dibit >> 1)); // bit 1
+      imbe_fr[iY[i]][iZ[i]] = (1 & dibit);        // bit 0
   }
 
-  //if (state->p25kid == 0)
-  {
-    // Check for a non-standard c0 transmitted. This is explained here: https://github.com/szechyjs/dsd/issues/24
-    unsigned int nsw = 0x00038000;
-    unsigned int gin = 0, gout;
-    int j;
-    for (j = 22; j >= 0; j--) {
-        gin <<= 1;
-        gin |= imbe_fr[0][j];
-    }
-
-    if (gin == nsw) {
-        // Skip this particular value. If we let it pass it will be signaled as an erroneus IMBE
-        printf("(Non-standard IMBE c0 detected, skipped)\n");
-    } else {
-        char imbe_d[88];
-        state->errs2 = mbe_golay2312 (gin, &gout);
-        for (j = 11; j >= 0; j--) {
-            imbe_fr[0][j+11] = (gout & 0x0800) >> 11;
-            gout <<= 1;
-        }
-        for (j = 0; j < 88; j++) {
-            imbe_d[j] = 0;
-        }
-        mbe_demodulateImbe7200x4400Data (imbe_fr);
-        state->errs2 += mbe_eccImbe7200x4400Data (imbe_fr, imbe_d);
-        processIMBEFrame (opts, state, imbe_d);
-    }
-  }
+  process_IMBE(opts, state, imbe_fr);
 }
 
 /**
@@ -396,7 +266,7 @@ processHDU(dsd_opts* opts, dsd_state* state)
   return mfid;
 }
 
-unsigned int
+static unsigned int
 read_and_correct_hex_word (dsd_opts* opts, dsd_state* state, int* status_count)
 {
   unsigned char hex_and_parity[40];
@@ -465,46 +335,46 @@ processLDU1 (dsd_opts* opts, dsd_state* state, char *outstr, unsigned int outlen
   status_count = 21;
 
   // IMBE 1
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // IMBE 2
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 2
   lcinfo[0] = read_and_correct_hex_word (opts, state, &status_count);
 
   // IMBE 3
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 3
   lcinfo[1] = read_and_correct_hex_word (opts, state, &status_count);
 
   // IMBE 4
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 4
   lcinfo[2] = read_and_correct_hex_word (opts, state, &status_count);
 
   // IMBE 5
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 5
   skip_dibit (opts, state, 20, &status_count);
 
   // IMBE 6
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 6
   skip_dibit (opts, state, 20, &status_count);
 
   // IMBE 7
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 7
   skip_dibit (opts, state, 20, &status_count);
 
   // IMBE 8
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 8: LSD (low speed data)
   read_dibit(opts, state, lsd, 16, &status_count);
@@ -521,7 +391,7 @@ processLDU1 (dsd_opts* opts, dsd_state* state, char *outstr, unsigned int outlen
   // TODO: do something useful with the LSD bytes...
 
   // IMBE 9
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // trailing status symbol
   getDibit (opts, state);
@@ -532,7 +402,7 @@ processLDU1 (dsd_opts* opts, dsd_state* state, char *outstr, unsigned int outlen
   mfid  = ((lcinfo[0] >> 10) & 0xFF);
   snprintf(outstr, outlen, "LDU1: e: %u, mfid: %s (%u), talkgroup: %u, src: %u, lsd: 0x%02x/0x%02x",
           state->errs2, mfids[mfid_mapping[mfid&0x3f]], mfid, state->talkgroup, state->radio_id, lsd1, lsd2);
-  decode_p25_lcf(lcinfo);
+  //decode_p25_lcf(lcinfo);
 }
 
 static unsigned int 
@@ -549,46 +419,46 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   status_count = 21;
 
   // IMBE 1
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // IMBE 2
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 2
   skip_dibit (opts, state, 20, &status_count);
 
   // IMBE 3
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 3
   skip_dibit (opts, state, 20, &status_count);
 
   // IMBE 4
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 4
   skip_dibit (opts, state, 20, &status_count);
 
   // IMBE 5
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 5
   skip_dibit (opts, state, 20, &status_count);
 
   // IMBE 6
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 6
   skip_dibit (opts, state, 20, &status_count);
 
   // IMBE 7
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 7
   skip_dibit (opts, state, 20, &status_count);
 
   // IMBE 8
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // Read data after IMBE 8: LSD (low speed data)
   read_dibit(opts, state, lsd, 16, &status_count);
@@ -607,7 +477,7 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
   // TODO: do something useful with the LSD bytes...
 
   // IMBE 9
-  process_IMBE (opts, state, &status_count);
+  read_IMBE (opts, state, &status_count);
 
   // trailing status symbol
   getDibit (opts, state);
@@ -673,7 +543,7 @@ processTDULC (dsd_opts* opts, dsd_state* state)
   lcinfo[2] |= (dodeca_data[0] << 12);
 
   mfid  = ((lcinfo[0] >> 10) & 0xFF);
-  decode_p25_lcf(lcinfo);
+  //decode_p25_lcf(lcinfo);
   return mfid;
 }
 

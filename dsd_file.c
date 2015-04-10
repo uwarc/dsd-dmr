@@ -139,6 +139,132 @@ writeSynthesizedVoice (dsd_opts * opts, dsd_state * state)
   write(opts->wav_out_fd, aout_buf, 160 * sizeof(int16_t));
 }
 
+static unsigned int mbe_golay2312 (unsigned int *block)
+{
+  unsigned int i, errs = 0, in = *block;
+
+  Golay23_Correct (block);
+
+  in >>= 11;
+  in ^= *block;
+  for (i = 0; i < 12; i++) {
+      if ((in >> i) & 1) {
+          errs++;
+      }
+  }
+
+  return (errs);
+}
+
+static void mbe_demodulateImbe7200x4400Data (char imbe[8][23])
+{
+  int i, j = 0, k;
+  unsigned short pr[115], foo = 0;
+
+  // create pseudo-random modulator
+  for (i = 11; i >= 0; i--) {
+      foo <<= 1;
+      foo |= imbe[0][11+i];
+  }
+
+  pr[0] = (16 * foo);
+  for (i = 1; i < 115; i++) {
+      pr[i] = (173 * pr[i - 1]) + 13849 - (65536 * (((173 * pr[i - 1]) + 13849) >> 16));
+  }
+  for (i = 1; i < 115; i++) {
+      pr[i] >>= 15;
+  }
+
+  // demodulate imbe with pr
+  k = 1;
+  for (i = 1; i < 4; i++) {
+      for (j = 22; j >= 0; j--)
+        imbe[i][j] ^= pr[k++];
+  }
+  for (i = 4; i < 7; i++) {
+      for (j = 14; j >= 0; j--)
+        imbe[i][j] ^= pr[k++];
+  }
+}
+
+static int mbe_eccImbe7200x4400Data (char imbe_fr[8][23], char *imbe_d)
+{
+  int i, j = 0, errs = 0;
+  unsigned int hin, block;
+  char *imbe = imbe_d;
+
+  for (j = 11; j >= 0; j--) {
+    *imbe++ = imbe_fr[0][j+11];
+  }
+
+  for (i = 1; i < 4; i++) {
+      block = 0;
+      for (j = 22; j >= 0; j--) {
+          block <<= 1;
+          block |= imbe_fr[i][j];
+      }
+      errs += mbe_golay2312 (&block);
+      for (j = 0; j < 12; j++) {
+          *imbe++ = ((block >> j) & 1);
+      }
+  }
+  for (i = 4; i < 7; i++) {
+      hin = 0;
+      for (j = 0; j < 15; j++) {
+          hin <<= 1;
+          hin |= imbe_fr[i][14-j];
+      }
+      block = hin;
+      p25_hamming15_11_3_decode(&block);
+      errs += ((hin >> 4) != block);
+      for (j = 14; j >= 4; j--) {
+          *imbe++ = ((block & 0x0400) >> 10);
+          block = block << 1;
+      }
+  }
+  for (j = 6; j >= 0; j--) {
+      *imbe++ = imbe_fr[7][j];
+  }
+
+  return (errs);
+}
+
+void
+process_IMBE (dsd_opts* opts, dsd_state* state, char imbe_fr[8][23])
+{
+  unsigned int i;
+
+  //if (state->p25kid == 0)
+  {
+    // Check for a non-standard c0 transmitted. This is explained here: https://github.com/szechyjs/dsd/issues/24
+    unsigned int nsw = 0x00038000;
+    unsigned int block = 0;
+    int j;
+    for (j = 22; j >= 0; j--) {
+        block <<= 1;
+        block |= imbe_fr[0][j];
+    }
+
+    if (block == nsw) {
+        // Skip this particular value. If we let it pass it will be signaled as an erroneus IMBE
+        printf("(Non-standard IMBE c0 detected, skipped)\n");
+    } else {
+        char imbe_d[88];
+        state->errs2 = mbe_golay2312 (&block);
+        for (j = 11; j >= 0; j--) {
+            imbe_fr[0][j+11] = (block & 0x0800) >> 11;
+            block <<= 1;
+        }
+        for (j = 0; j < 88; j++) {
+            imbe_d[j] = 0;
+        }
+        mbe_demodulateImbe7200x4400Data (imbe_fr);
+        state->errs2 += mbe_eccImbe7200x4400Data (imbe_fr, imbe_d);
+        processIMBEFrame (opts, state, imbe_d);
+    }
+  }
+}
+
 void demodAmbe3600x24x0Data (int *errs2, char ambe_fr[4][24], char *ambe_d)
 {
   int i, j, k;
@@ -151,16 +277,7 @@ void demodAmbe3600x24x0Data (int *errs2, char ambe_fr[4][24], char *ambe_d)
       block |= ambe_fr[0][j+1];
   }
 
-  gin = block;
-  Golay23_Correct (&block);
-
-  gin >>= 11;
-  gin ^= block;
-  for (j = 0; j < 12; j++) {
-      if ((gin >> j) & 1) {
-          errs++;
-      }
-  }
+  errs = mbe_golay2312(&block);
 
   // create pseudo-random modulator
   foo = block;
@@ -185,17 +302,7 @@ void demodAmbe3600x24x0Data (int *errs2, char ambe_fr[4][24], char *ambe_d)
       block |= (ambe_fr[1][i] ^ pr[k++]);
   }
 
-  gin = block;
-  Golay23_Correct (&block);
-
-  gin >>= 11;
-  gin ^= block;
-  for (j = 0; j < 12; j++) {
-      if ((gin >> j) & 1) {
-          errs++;
-      }
-  }
-
+  errs += mbe_golay2312(&block);
   for (j = 11; j >= 0; j--) {
       *ambe++ = ((block >> j) & 1);
   }
