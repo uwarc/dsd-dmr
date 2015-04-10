@@ -16,7 +16,6 @@
  */
 
 #include "dsd.h"
-int bchDec(uint64_t cw, uint16_t *cw_decoded);
 
 static const char *p25frametypes[16] = {
     "HDU",
@@ -28,7 +27,7 @@ static const char *p25frametypes[16] = {
     "????",
     "TSDU",
     "????",
-    "????",
+    "VSELP",
     "LDU2",
     "????",
     "PDU",
@@ -109,14 +108,32 @@ get_p25_nac_and_duid(dsd_opts *opts, dsd_state *state)
           duid = new_duid;
           state->debug_header_errors++;
       }
-  } else {
-      // Check of NID failed and unable to recover its value
-      printf("p25: Unable to correct errors in NAC/DUID: 0x%03x/0x%x (attempted correction: 0x%03x/0x%x)\n",
-             nac, duid, (new_nac >> 4), (new_nac & 0x0F));
   }
   state->nac = nac;
   state->duid = duid;
   return (check_result >= 0);
+}
+
+static void
+processNXDNData (dsd_opts * opts, dsd_state * state, unsigned char lich[9])
+{
+  unsigned int i, dibit;
+  unsigned char *dibit_p;
+  unsigned char lich_scram[9] = { 0, 0, 1, 0, 0, 1, 1, 1, 0 };
+  dibit_p = state->dibit_buf_p - 8;
+
+  for (i = 0; i < 8; i++) {
+      dibit = *dibit_p++;
+      if(lich_scram[i] ^ (state->lastsynctype & 0x1)) {
+          dibit = (dibit ^ 2);
+      }
+      lich[i] = 1 & (dibit >> 1);
+  }
+
+  closeMbeOutFile (opts, state);
+  state->errs2 = 0;
+
+  skipDibit (opts, state, 174);
 }
 
 void
@@ -128,22 +145,30 @@ processFrame (dsd_opts * opts, dsd_state * state)
   state->nac = 0;
   state->duid = 0;
 
-  if (synctype == 8) {
-      processNXDNData (opts, state);
+  if (synctype == 3) {
+      unsigned char lich[9];
+      processNXDNData (opts, state, lich);
+      printf ("Sync: %s mod: %s offs: %4u inlvl: %2i%% DATA: %s Ch\n",
+              state->ftype, ((state->rf_mod == 2) ? "GFSK" : "QPSK"), state->offset, level,
+              (lich[1] ? (lich[0] ? "Trunk-C Traffic" : "Trunk-D Composite") 
+                       : (lich[0] ? "Trunk-C Control" : (lich[6] ? "Repeater" : "Mobile Direct"))));
       return;
-  } else if ((synctype == 5) || (synctype == 1)) {
+  } else if ((synctype == 2) || (synctype == 1)) {
       processDMRdata (opts, state);
       return;
   }
 
   if (synctype == 0) {
+      char tmpStr[1024];
       unsigned char ret = get_p25_nac_and_duid(opts, state);
-      printf ("Sync: %s mod: %s offs: %u      inlvl: %2i%% p25 NAC: 0x%03x, DUID: 0x%x -> %s\n",
-              state->ftype, ((state->rf_mod == 2) ? "GFSK" : "QPSK"), state->offset, level,
-              state->nac, state->duid, p25frametypes[state->duid]);
       if (ret) {
-        process_p25_frame (opts, state);
+        process_p25_frame (opts, state, tmpStr, 1023);
+      } else {
+        snprintf(tmpStr, 1023, "Unable to correct errors in NAC/DUID (%s)", p25frametypes[state->duid]);
       }
+      printf ("Sync: %s mod: %s offs: %4u inlvl: %2i%% p25 NAC: 0x%03x, DUID: 0x%x -> %s\n",
+              state->ftype, ((state->rf_mod == 2) ? "GFSK" : "QPSK"), state->offset, level,
+              state->nac, state->duid, tmpStr);
       return;
   }
 
@@ -151,19 +176,20 @@ processFrame (dsd_opts * opts, dsd_state * state)
     openMbeOutFile (opts, state);
   }
 
-  if (synctype == 4) {
+  if (synctype == 8) {
       total_errs = processNXDNVoice (opts, state);
-  } else if (synctype == 3) {
+  } else if (synctype == 4) {
       total_errs = processDSTAR (opts, state);
-  } else if (synctype == 9) {
+  } else if (synctype == 5) {
       total_errs = processDSTAR_HD (opts, state);
   } else if (synctype == 6) {
       total_errs = processDMRvoice (opts, state);
-  } else if (synctype == 2) {
-      processX2TDMAvoice (opts, state);
+  } else if (synctype == 7) {
+      total_errs = processX2TDMAvoice (opts, state);
   }
-  printf ("Sync: %s mod: GFSK      inlvl: %2i%% %s %s  VOICE e: %u\n",
-          state->ftype, level, state->slot0light, state->slot1light, total_errs);
+  printf ("Sync: %s mod: %s, offs: %4u, inlvl: %2i%% %s %s  VOICE e: %u\n",
+          state->ftype, ((state->rf_mod == 2) ? "GFSK" : "QPSK"), state->offset, level,
+          state->slot0light, state->slot1light, total_errs);
   return;
 }
 
