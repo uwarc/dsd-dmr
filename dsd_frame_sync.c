@@ -51,20 +51,20 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
    *  1 = -P25p1
    *  2 = +X2-TDMA (non inverted signal data frame)
    *  3 = -X2-TDMA (inverted signal data frame)
-   *  4 = +X2-TDMA (non inverted signal voice frame)
-   *  5 = -X2-TDMA (inverted signal voice frame)
-   *  6 = +D-STAR
-   *  7 = -D-STAR
-   *  8 = +NXDN (non inverted voice frame)
-   *  9 = -NXDN (inverted voice frame)
-   * 10 = +DMR (non inverted signal data frame)
-   * 11 = -DMR (inverted signal data frame)
+   *  4 = +DMR (non inverted signal data frame)
+   *  5 = -DMR (inverted signal data frame)
+   *  6 = +NXDN (non inverted data frame)
+   *  7 = -NXDN (inverted data frame)
+   *  8 = +D-STAR
+   *  9 = -D-STAR
+   * 10 = +D-STAR_HD
+   * 11 = -D-STAR_HD
    * 12 = +DMR (non inverted signal voice frame)
    * 13 = -DMR (inverted signal voice frame)
-   * 16 = +NXDN (non inverted data frame)
-   * 17 = -NXDN (inverted data frame)
-   * 18 = +D-STAR_HD
-   * 19 = -D-STAR_HD
+   * 14 = +X2-TDMA (non inverted signal voice frame)
+   * 15 = -X2-TDMA (inverted signal voice frame)
+   * 16 = +NXDN (non inverted voice frame)
+   * 17 = -NXDN (inverted voice frame)
    */
 
   int i, t, dibit, sync, symbol, synctest_pos, lastt;
@@ -155,10 +155,10 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             if (opts->inverted_dmr == 0) {
                 // data frame
                 strcpy (state->ftype, "+DMR  ");
-                if (state->lastsynctype != 10) {
+                if (state->lastsynctype != 4) {
                     state->firstframe = 1;
                 }
-                state->lastsynctype = 10;
+                state->lastsynctype = 4;
             } else {
                 // inverted voice frame
                 strcpy (state->ftype, "-DMR  ");
@@ -183,10 +183,10 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             } else {
                 // inverted data frame
                 strcpy (state->ftype, "-DMR  ");
-                if (state->lastsynctype != 11) {
+                if (state->lastsynctype != 5) {
                     state->firstframe = 1;
                 }
-                state->lastsynctype = 11;
+                state->lastsynctype = 5;
             }
             goto update_sync_and_return;
           }
@@ -201,10 +201,10 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             } else {
                 // inverted voice frame
                 strcpy(state->ftype, "-X2-TDMA ");
-                if (state->lastsynctype != 3) {
+                if (state->lastsynctype != 15) {
                    state->firstframe = 1;
                 }
-                state->lastsynctype = 5;
+                state->lastsynctype = 15;
             }
             goto update_sync_and_return;
           }
@@ -215,10 +215,10 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             if (opts->inverted_x2tdma == 0) {
                 // voice frame
                 strcpy (state->ftype, "+X2-TDMA ");
-                if (state->lastsynctype != 4) {
+                if (state->lastsynctype != 14) {
                    state->firstframe = 1;
                 }
-                state->lastsynctype = 4;
+                state->lastsynctype = 14;
             } else {
                 // inverted data frame
                 strcpy (state->ftype, "-X2-TDMA ");
@@ -231,50 +231,30 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
               (memcmp (synctest+6, NXDN_MS_VOICE_SYNC, 18) == 0) ||
               (memcmp (synctest+6, NXDN_BS_DATA_SYNC, 18) == 0)  ||
               (memcmp (synctest+6, NXDN_MS_DATA_SYNC, 18) == 0)) {
-              if ((state->lastsynctype == 8) || (state->lastsynctype == 16)) {
-                      state->offset = synctest_pos;
-                      if (state->samplesPerSymbol == 20) {
-                          strcpy (state->ftype, "+NXDN48  ");
-                      } else {
-                          strcpy (state->ftype, "+NXDN96  ");
-                      }
-                      if (synctest[21] == '1') {
-                          state->lastsynctype = 8;
-                      } else {
-                          state->lastsynctype = 16;
-                      }
-                      goto update_sync_and_return;
+              if (synctest[21] == '1') {
+                  state->lastsynctype = 6;
               } else {
-                      if (synctest[21] == '1') {
-                          state->lastsynctype = 8;
-                      } else {
-                          state->lastsynctype = 16;
-                      }
+                  state->lastsynctype = 16;
+              }
+              if ((state->lastsynctype == 6) || (state->lastsynctype == 16)) {
+                  state->offset = synctest_pos;
+                  strcpy (state->ftype, "+NXDN96  ");
+                  goto update_sync_and_return;
               }
           }
           if ((memcmp (synctest+6, INV_NXDN_BS_VOICE_SYNC, 18) == 0) || 
               (memcmp (synctest+6, INV_NXDN_MS_VOICE_SYNC, 18) == 0) ||
               (memcmp (synctest+6, INV_NXDN_BS_DATA_SYNC, 18) == 0) ||
               (memcmp (synctest+6, INV_NXDN_MS_DATA_SYNC, 18) == 0)) {
-              if ((state->lastsynctype == 9) || (state->lastsynctype == 17)) {
-                      state->offset = synctest_pos;
-                      if (state->samplesPerSymbol == 20) {
-                          strcpy (state->ftype, "-NXDN48  ");
-                      } else {
-                          strcpy (state->ftype, "-NXDN96  ");
-                      }
-                      if (synctest[21] == '3') {
-                          state->lastsynctype = 9;
-                      } else {
-                          state->lastsynctype = 17;
-                      }
-                      goto update_sync_and_return;
+              if (synctest[21] == '3') {
+                  state->lastsynctype = 7;
               } else {
-                      if (synctest[21] == '3') {
-                          state->lastsynctype = 9;
-                      } else {
-                          state->lastsynctype = 17;
-                      }
+                  state->lastsynctype = 17;
+              }
+              if ((state->lastsynctype == 7) || (state->lastsynctype == 17)) {
+                  state->offset = synctest_pos;
+                  strcpy (state->ftype, "-NXDN96  ");
+                  goto update_sync_and_return;
               }
           }
 
@@ -282,10 +262,10 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             state->offset = synctest_pos;
             if (synctest[0] == '3') {
                 strcpy (state->ftype, "+D-STAR  ");
-                state->lastsynctype = 6;
+                state->lastsynctype = 8;
             } else {
                 strcpy (state->ftype, "-D-STAR  ");
-                state->lastsynctype = 7;
+                state->lastsynctype = 9;
             }
             goto update_sync_and_return;
           }
@@ -293,10 +273,10 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             state->offset = synctest_pos;
             if (synctest[0] == '1') {
                 strcpy (state->ftype, "+D-STARHD");
-                state->lastsynctype = 18;
+                state->lastsynctype = 10;
             } else {
                 strcpy (state->ftype, "-D-STARHD");
-                state->lastsynctype = 19;
+                state->lastsynctype = 11;
             }
             goto update_sync_and_return;
           }
@@ -319,7 +299,7 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
       if (state->lastsynctype != -1) {
           //if (synctest_pos >= 1800) {
           if (synctest_pos >= 9000) {
-              if (state->lastsynctype != -1) {
+              if ((state->lastsynctype != -1) && !(opts->datascope)) {
                   printf ("Sync: no sync\n");
               }
               state->lastsynctype = -1;
