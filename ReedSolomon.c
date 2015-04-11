@@ -57,7 +57,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include "ReedSolomon.h"
 #define EXT_(name, ord) rs## ord ## _##name
 #define EXT(name, ord) EXT_(name, ord)
 
@@ -79,8 +78,6 @@ void EXT(init, MM)(ReedSolomon *rs, unsigned int generator_polinomial, unsigned 
     register int i, j, mask = 1;
 
     rs->tt = tt;
-    rs->kk = (NN - 2*rs->tt);
-    //rs->n = (NN - rs->kk);
     rs->n = 2*rs->tt;
     rs->alpha_to[MM] = 0;
     for (i = 0; i < MM; i++) {
@@ -126,12 +123,12 @@ void EXT(init, MM)(ReedSolomon *rs, unsigned int generator_polinomial, unsigned 
  Codeword is   c(X) = data(X)*X**(nn-kk)+ b(X)          */
 void EXT(encode, MM)(ReedSolomon *rs, const unsigned char *data, unsigned char *bb)
 {
-    register int i, j;
+    register int i, j, k = (NN - rs->n);
     int feedback;
 
     for (i = 0; i < rs->n; i++)
         bb[i] = 0;
-    for (i = rs->kk - 1; i >= 0; i--) {
+    for (i = k - 1; i >= 0; i--) {
         feedback = rs->index_of[data[i] ^ bb[rs->n - 1]];
         if (feedback != -1) {
             for (j = rs->n - 1; j > 0; j--)
@@ -167,9 +164,9 @@ int EXT(decode, MM)(ReedSolomon *rs, unsigned char *input, unsigned char *recd)
 {
     //register int i, j, u, q;
     register int i, j, u;
-    register unsigned int q;
+    register unsigned int q, syn_error = 0;
     int elp[NN + 2][NN], d[NN + 2], l[NN + 2], u_lu[NN + 2], s[NN + 1];
-    int count = 0, syn_error = 0, root[MAX_TT], loc[MAX_TT], z[MAX_TT + 1], err[NN], reg[MAX_TT + 1];
+    int count = 0, root[MAX_TT], loc[MAX_TT], z[MAX_TT + 1], err[NN], reg[MAX_TT + 1];
     int irrecoverable_error = 0;
 
     for (i = 0; i < NN; i++)
