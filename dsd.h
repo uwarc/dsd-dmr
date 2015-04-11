@@ -34,7 +34,7 @@
 #include <sys/soundcard.h>
 #include <math.h>
 #include <mbelib.h>
-#include "ReedSolomon.h"
+#include "fec.h"
 #define SAMPLE_RATE_IN 48000
 #define SAMPLE_RATE_OUT 8000
 #define FSK4_NTAPS  8
@@ -225,11 +225,6 @@ get_uint(unsigned char *payload, unsigned int bits)
 /*
  * Function prototypes 
  */
-void Golay23_Correct(unsigned int *block);
-unsigned int Golay23_Encode(unsigned int cw);
-void Hamming15_11_3_Correct(unsigned int *codeword);
-void p25_hamming15_11_3_decode(unsigned int *codeword);
-
 unsigned int getDibit (dsd_opts * opts, dsd_state * state);
 void skipDibit (dsd_opts * opts, dsd_state * state, int count);
 void Shellsort_int(int *in, unsigned int n);
