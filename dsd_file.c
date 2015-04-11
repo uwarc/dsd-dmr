@@ -215,7 +215,7 @@ static int mbe_eccImbe7200x4400Data (char imbe_fr[8][23], char *imbe_d)
           hin |= imbe_fr[i][14-j];
       }
       block = hin;
-      p25_hamming15_11_3_decode(&block);
+      p25_Hamming15_11_3_Correct(&block);
       errs += ((hin >> 4) != block);
       for (j = 14; j >= 4; j--) {
           *imbe++ = ((block & 0x0400) >> 10);
@@ -232,8 +232,6 @@ static int mbe_eccImbe7200x4400Data (char imbe_fr[8][23], char *imbe_d)
 void
 process_IMBE (dsd_opts* opts, dsd_state* state, char imbe_fr[8][23])
 {
-  unsigned int i;
-
   //if (state->p25kid == 0)
   {
     // Check for a non-standard c0 transmitted. This is explained here: https://github.com/szechyjs/dsd/issues/24
@@ -268,7 +266,7 @@ process_IMBE (dsd_opts* opts, dsd_state* state, char imbe_fr[8][23])
 void demodAmbe3600x24x0Data (int *errs2, char ambe_fr[4][24], char *ambe_d)
 {
   int i, j, k;
-  unsigned int block = 0, gin = 0, errs = 0;
+  unsigned int block = 0, errs = 0;
   unsigned short pr[115], foo;
   char *ambe = ambe_d;
 

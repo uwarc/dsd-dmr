@@ -139,7 +139,7 @@ static int mbe_eccImbe7200x4400Data (char imbe_fr[8][23], char *imbe_d)
           hin |= imbe_fr[i][14-j];
       }
       block = hin;
-      p25_hamming15_11_3_decode(&block);
+      p25_Hamming15_11_3_Correct(&block);
       errs += ((hin >> 4) != block);
       for (j = 14; j >= 4; j--) {
           *imbe++ = ((block & 0x0400) >> 10);
