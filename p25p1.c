@@ -51,66 +51,6 @@ static const char *mfids[36] = {
    "Zetron, Inc"
 };
 
-static unsigned int Hamming1064Gen[6] = {
-    0x20e, 0x10d, 0x08b, 0x047, 0x023, 0x01c
-};
-
-static unsigned int Hamming15113Gen[11] = {
-    0x400f, 0x200e, 0x100d, 0x080c, 0x040b, 0x020a, 0x0109, 0x0087, 0x0046, 0x0025, 0x0013
-};
-
-void p25_hamming10_6_4_decode(unsigned int *codeword)
-{
-  unsigned int i, block = *codeword, ecc = 0, syndrome;
-
-  for(i = 0; i < 6; i++) {
-      if((block & Hamming1064Gen[i]) > 0xf)
-          ecc ^= Hamming1064Gen[i];
-  }
-  syndrome = ecc ^ block;
-
-  if (syndrome > 0) {
-      block ^= (1U << (syndrome - 1));
-  }
-
-  *codeword = (block >> 4);
-}
-
-void p25_hamming15_11_3_decode(unsigned int *codeword)
-{
-  unsigned int i, block = *codeword, ecc = 0, syndrome;
-
-  for(i = 0; i < 11; i++) {
-      if((block & Hamming15113Gen[i]) > 0xf)
-          ecc ^= Hamming15113Gen[i];
-  }
-  syndrome = ecc ^ block;
-
-  if (syndrome > 0) {
-      block ^= (1U << (syndrome - 1));
-  }
-
-  *codeword = (block >> 4);
-}
-
-static unsigned int Cyclic1685Gen[8] = {
-    0x804e, 0x4027, 0x208f, 0x10db, 0x08f1, 0x04e4, 0x0272, 0x0139
-};
-
-void p25_lsd_cyclic1685_decode(unsigned int *codeword)
-{
-  unsigned int i, block = *codeword, ecc = 0, syndrome;
-  for(i = 0; i < 8; i++) {
-      if((block & Cyclic1685Gen[i]) > 0xff)
-          ecc ^= Cyclic1685Gen[i];
-  }
-  syndrome = ecc ^ block;
-  if (syndrome > 0) {
-      block ^= (1U << (syndrome - 1));
-  }
-  *codeword = (block >> 8);
-}
-
 void
 read_dibit (dsd_opts* opts, dsd_state* state, unsigned char* output, unsigned int count, int* status_count)
 {
@@ -289,28 +229,28 @@ read_and_correct_hex_word (dsd_opts* opts, dsd_state* state, int* status_count)
       value_in[3] |= hex_and_parity[i+15];
   }
   value = value_in[0];
-  p25_hamming10_6_4_decode(&value);
+  p25_Hamming10_6_4_Correct(&value);
   value_in[0] >>= 4;
   if (value != value_in[0]) { state->debug_header_errors++; }
   value_out <<= 6;
   value_out |= value;
 
   value = value_in[1];
-  p25_hamming10_6_4_decode(&value);
+  p25_Hamming10_6_4_Correct(&value);
   value_in[1] >>= 4;
   if (value != value_in[1]) { state->debug_header_errors++; }
   value_out <<= 6;
   value_out |= value;
 
   value = value_in[2];
-  p25_hamming10_6_4_decode(&value);
+  p25_Hamming10_6_4_Correct(&value);
   value_in[2] >>= 4;
   if (value != value_in[2]) { state->debug_header_errors++; }
   value_out <<= 6;
   value_out |= value;
 
   value = value_in[3];
-  p25_hamming10_6_4_decode(&value);
+  p25_Hamming10_6_4_Correct(&value);
   value_in[3] >>= 4;
   if (value != value_in[3]) { state->debug_header_errors++; }
   value_out <<= 6;
@@ -386,8 +326,8 @@ processLDU1 (dsd_opts* opts, dsd_state* state, char *outstr, unsigned int outlen
     lsd2 |= lsd[i+8];
   }
 
-  p25_lsd_cyclic1685_decode(&lsd1);
-  p25_lsd_cyclic1685_decode(&lsd2);
+  p25_lsd_cyclic1685_Correct(&lsd1);
+  p25_lsd_cyclic1685_Correct(&lsd2);
   // TODO: do something useful with the LSD bytes...
 
   // IMBE 9
@@ -470,8 +410,8 @@ processLDU2 (dsd_opts * opts, dsd_state * state)
     lsd2 |= lsd[i+8];
   }
 
-  p25_lsd_cyclic1685_decode(&lsd1);
-  p25_lsd_cyclic1685_decode(&lsd2);
+  p25_lsd_cyclic1685_Correct(&lsd1);
+  p25_lsd_cyclic1685_Correct(&lsd2);
   //state->p25lsd1 = lsd1;
   //state->p25lsd2 = lsd2;
   // TODO: do something useful with the LSD bytes...
@@ -499,8 +439,8 @@ processTDU (dsd_opts* opts, dsd_state* state)
     getDibit (opts, state);
 }
 
-static unsigned char 
-processTDULC (dsd_opts* opts, dsd_state* state)
+static void
+processTDULC (dsd_opts* opts, dsd_state* state, char *outstr, unsigned int outlen)
 {
   unsigned int j, corrected_hexword = 0;
   unsigned char hex_and_parity[12];
@@ -543,60 +483,8 @@ processTDULC (dsd_opts* opts, dsd_state* state)
   lcinfo[2] |= (dodeca_data[0] << 12);
 
   mfid  = ((lcinfo[0] >> 10) & 0xFF);
+  snprintf(outstr, outlen, "TDULC: mfid: %s (%u)", mfids[mfid_mapping[mfid&0x3f]], mfid);
   //decode_p25_lcf(lcinfo);
-  return mfid;
-}
-
-static unsigned int
-trellis_1_2_decode(uint8_t *in, uint32_t in_sz, uint8_t *out)
-{
-   uint8_t state = 0;
-   unsigned int i, j;
-
-    /* constellation to dibit pair mapping
-    */
-    static const uint8_t NEXT_WORDS[4][4] = {
-        { 0x2, 0xc, 0x1, 0xf },
-        { 0xe, 0x0, 0xd, 0x3 },
-        { 0x9, 0x7, 0xa, 0x4 },
-        { 0x5, 0xb, 0x6, 0x8 }
-    };
-
-   /* bit counts
-    */
-   static const uint8_t BIT_COUNT[] = {
-      0, 1, 1, 2,
-      1, 2, 2, 3,
-      1, 2, 2, 3,
-      2, 3, 3, 4
-   };
-
-   // perform trellis decoding
-   in_sz--;
-   for(i = 0; i < in_sz; ++i) {
-      uint8_t codeword = (in[i] & 0x0f);
-      // find dibit with minimum Hamming distance
-      uint8_t m = 0;
-      uint8_t ns = UINT8_MAX;
-      uint8_t hd = UINT8_MAX;
-      for(j = 0; j < 4; j++) {
-         uint8_t n;
-         n = BIT_COUNT[codeword ^ NEXT_WORDS[state][j]];
-         if(n < hd) {
-            m = 1;
-            hd = n;
-            ns = j;
-         } else if(n == hd) {
-            ++m;
-         }
-      }
-      if(m != 1) {
-        return i;
-      }
-      state = ns;
-      out[i] = state;
-   }
-   return 0;
 }
 
 /* Symbol interleaving, derived from CAI specification table 7.4
@@ -617,6 +505,36 @@ static const size_t INTERLEAVING[] = {
    12 
 };
 
+typedef struct _Channel {
+    uint8_t valid, tdma;
+    uint16_t bandwidth, step;
+    float freq;
+} Channel;
+static Channel p25_default_channels[17];
+
+void p25_add_channel(uint8_t chan_id, unsigned int freq, uint16_t step, uint16_t bw_hz, uint8_t is_tdma) {
+    printf("Add: iden: %u, freq %.5fkHz+%uHz, bandwidth %uHz / step %uHz, slots/carrier: %u\n",
+           chan_id, 1000.0f * 5.0f * freq, 0, 10*bw_hz, step, is_tdma);
+	p25_default_channels[chan_id & 0x0f].freq = 5.0f * (float)freq;
+	p25_default_channels[chan_id & 0x0f].bandwidth = bw_hz;
+	p25_default_channels[chan_id & 0x0f].step = step;
+	p25_default_channels[chan_id & 0x0f].tdma = is_tdma;
+	p25_default_channels[chan_id & 0x0f].valid = 1;
+}
+
+float p25_chid_to_freq(uint8_t chan_id, uint16_t channel) {
+    if (p25_default_channels[chan_id & 0x0f].valid) {
+		Channel *temp_chan = &p25_default_channels[chan_id];
+        float freq = temp_chan->freq;
+		if (temp_chan->tdma == 0) {
+			return freq + temp_chan->step * channel;
+		} else {
+			return freq + temp_chan->step * (channel >> temp_chan->tdma);
+		}
+	}
+	return  0;
+}
+
 static void
 processTSBK(unsigned char raw_dibits[98], unsigned char out[12], int *status_count)
 {
@@ -633,7 +551,7 @@ processTSBK(unsigned char raw_dibits[98], unsigned char out[12], int *status_cou
     raw_dibits[49] = 0;
   }
 
-  err = trellis_1_2_decode(trellis_buffer, 49, raw_dibits); /* raw_dibits actually has decoded dibits here! */
+  err = p25_trellis_1_2_decode(trellis_buffer, 49, raw_dibits); /* raw_dibits actually has decoded dibits here! */
 
   for(i = 0; i < 12; ++i) {
     out[i] = ((raw_dibits[4*i] << 6) | (raw_dibits[4*i+1] << 4) | (raw_dibits[4*i+2] << 2) | (raw_dibits[4*i+3] << 0));
@@ -641,16 +559,82 @@ processTSBK(unsigned char raw_dibits[98], unsigned char out[12], int *status_cou
 
   opcode = (out[0] & 0x3f);
   if (err) {
-    printf("TSBK: mfid: 0x%02x, lb: %u, opcode: 0x%02x, err: trellis decode failed, offset: %u\n", out[1], (out[0] >> 7), opcode, err);
+    printf("TSBK: mfid: 0x%02x, lb: %u, opcode: 0x%02x, err: trellis decode failed, offset: %u\n",
+           out[1], (out[0] >> 7), opcode, err);
   } else {
+	unsigned int chan = (((out[7] << 8) | (out[8] << 0)) & 0x0fff);
+	unsigned char chan_id = (out[7] >> 4);
+	float f1 = p25_chid_to_freq(chan_id, chan);
     printf("TSBK: mfid: 0x%02x, lb: %u, opcode: 0x%02x\n", out[1], (out[0] >> 7), opcode);
+	if (opcode == 0x16) { // sndcp_data_ch
+        unsigned short ch1 = ((out[3] << 8) | out[4]);
+        unsigned short ch2 = ((out[5] << 8) | out[6]);
+	    printf("sndcp_data_ch: Ch1: %u -> Ch2: %u\n", ch1, ch2);
+	} else if (opcode == 0x34) {  // iden_up vhf uhf
+        unsigned char iden = (out[2] >> 4);
+        unsigned short bwvu = (625 << (out[2] & 0x01));
+        unsigned int step = 125*(((out[4] << 8) | out[5]) & 0x3ff);
+        unsigned int freq = ((out[6] << 24) | (out[7] << 16) | (out[8] << 8) | (out[9] << 0)); 
+        signed int toff = (((out[3] << 6) | (out[4] >> 2)) & 0x1fff);
+		unsigned char toff_sign = (out[3] & 0x80);
+		if (toff_sign == 0) {
+			toff = 0 - toff;
+		}
+		p25_add_channel(iden, freq, step, bwvu, 0);
+		printf("iden_up_vhf/uhf iden: %u, toff: %.5f, spacing: %u, freq: %.5fkHz [mob Tx%c]\n",
+               iden, (toff * step * 10e-3f), step, (5.0f * freq * 10e-3f), (toff_sign ? '+' : '-'));
+	} else if (opcode == 0x33) {  // iden_up_tdma
+        unsigned char iden = (out[2] >> 4);
+		unsigned char slots_per_carrier[] = {1,1,1,2,4,2};
+		unsigned char channel_type = (out[3] & 0x0f);
+        unsigned int step = 125*(((out[4] << 8) | out[5]) & 0x3ff);
+        unsigned int freq = ((out[6] << 24) | (out[7] << 16) | (out[8] << 8) | (out[9] << 0)); 
+        signed int toff = (((out[3] << 6) | (out[4] >> 2)) & 0x1fff);
+		unsigned char toff_sign = (out[3] & 0x80);
+		if (toff_sign == 0) {
+			toff = 0 - toff;
+		}
+		p25_add_channel(iden, freq, step, 625, slots_per_carrier[channel_type]);
+		printf("iden_up_tdma: iden: %u: freq: %.5fkHz, offset: %u, step: %u, slots/carrier: %u\n",
+               iden, (5.0f * freq * 10e-3f), (toff * step), step, slots_per_carrier[channel_type]);
+	} else if (opcode == 0x3d)  {  // iden_up
+        unsigned char iden = (out[2] >> 4);
+        unsigned short bw = (((out[2] << 5) | (out[3] >> 3)) & 0x01ff);
+        unsigned int step = 125*(((out[4] << 8) | out[5]) & 0x3ff);
+        unsigned int freq = ((out[6] << 24) | (out[7] << 16) | (out[8] << 8) | (out[9] << 0)); 
+        signed short toff = (((out[3] << 6) | (out[4] >> 2)) & 0xff);
+		unsigned char toff_sign = (out[3] & 0x04);
+		if (toff_sign == 0) {
+			toff = 0 - toff;
+		}
+		p25_add_channel(iden, freq, step, bw, 0);
+		printf("iden_up: iden: %u, toff: %.5f, spacing: %u, freq: %.5fkHz [mob Tx%c]\n",
+               iden, (toff * 0.25f), step, (5.0f * freq * 10e-3f), (toff_sign ? '+' : '-'));
+    } else if (opcode == 0x3a) { // rfss_status
+		unsigned short syid = (((out[3] & 0x0f) << 8) | out[4]);
+		printf("rfss_status: LRA: %u, syid: %u, rfid: %u, siteid: %u, Ch1: iden: %u, ch: %u (%.5fMHz)\n",
+               out[2], syid, out[5], out[6], chan_id, chan, (f1 * 10e-6f));
+    } else if (opcode == 0x39) { // secondary CC
+		unsigned int ch1 = ((out[4] << 8) | (out[5] << 0));
+		printf("secondary cc: rfid %u, siteid: %u, Ch1: iden: %u, ch: %u -> Ch2: iden: %u, ch: %u\n",
+               out[2], out[3], (ch1 >> 12), (ch1 & 0x0fff), chan_id, chan);
+	} else if (opcode == 0x3b) {  // network status
+		unsigned short wacn = ((out[3] << 12) | (out[4] << 4) | (out[5] >> 4));
+		unsigned short syid = (((out[5] & 0x0f) << 8) | out[6]);
+		printf("Network Status: LRA: %u, WACN: 0x%04x, syid: %u, Ch1: iden: %u, ch: %u (%.5fMHz)\n",
+               out[2], wacn, syid, chan_id, chan, (f1 * 10e-6f));
+    } else if (opcode == 0x3c) { // adjacent_status
+		unsigned short syid = (((out[3] & 0x0f) << 8) | out[4]);
+		printf("Adjacent Status: LRA: %u, syid: %u, rfid: %u, siteid: %u, Ch1: iden: %u, ch: %u (%.5fMHz)\n",
+               out[2], syid, out[5], out[6], chan_id, chan, (f1 * 10e-6f));
+    }
   }
 }
 
 static void
 processTSDU(dsd_opts* opts, dsd_state* state)
 {
-  unsigned char last_block = 0;
+  unsigned char last_block = 0, k = 0;
   unsigned char raw_dibits[98];
   unsigned char out[12];
   int status_count;
@@ -660,10 +644,11 @@ processTSDU(dsd_opts* opts, dsd_state* state)
   // so we start counter at 36-14-1 = 21
   status_count = 21;
 
-  while (!last_block) {
+  while (!last_block && (k < 3)) {
     read_dibit(opts, state, raw_dibits, 98, &status_count);
     processTSBK(raw_dibits, out, &status_count);
     last_block = (out[0] >> 7);
+    k++;
   }
 
   // trailing status symbol
@@ -713,11 +698,10 @@ void process_p25_frame(dsd_opts *opts, dsd_state *state, char *tmpStr, unsigned 
       if (duid == 3) {
         // Terminator without subsequent Link Control
         processTDU (opts, state);
-        snprintf(tmpStr, 1023, "TDU");
+        strcpy(tmpStr, "TDU");
       } else {
         // Terminator with subsequent Link Control
-        unsigned char mfid = processTDULC (opts, state);
-        snprintf(tmpStr, 1023, "TDULC: mfid: %s (%u)", mfids[mfid_mapping[mfid&0x3f]], mfid);
+        processTDULC (opts, state, tmpStr, 1023);
       }
   } else if (duid == 7) { // 13 -> 0111 = 7
       state->talkgroup = 0;
