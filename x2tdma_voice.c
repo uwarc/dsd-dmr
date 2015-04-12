@@ -18,36 +18,13 @@
 #include "dsd.h"
 #include "x2tdma_const.h"
 
-static unsigned char hamming7_4_decode[64] =
-{
-    0x00, 0x01, 0x08, 0x24, 0x01, 0x11, 0x53, 0x91, 
-    0x06, 0x2A, 0x23, 0x22, 0xB3, 0x71, 0x33, 0x23, 
-    0x06, 0xC4, 0x54, 0x44, 0x5D, 0x71, 0x55, 0x54, 
-    0x66, 0x76, 0xE6, 0x24, 0x76, 0x77, 0x53, 0x7F, 
-    0x08, 0xCA, 0x88, 0x98, 0xBD, 0x91, 0x98, 0x99, 
-    0xBA, 0xAA, 0xE8, 0x2A, 0xBB, 0xBA, 0xB3, 0x9F, 
-    0xCD, 0xCC, 0xE8, 0xC4, 0xDD, 0xCD, 0x5D, 0x9F, 
-    0xE6, 0xCA, 0xEE, 0xEF, 0xBD, 0x7F, 0xEF, 0xFF, 
-};
-
-static unsigned char hamming7_4_correct(unsigned char value)
-{
-    unsigned char c = hamming7_4_decode[value >> 1];
-    if (value & 1) {
-        c &= 0x0F;
-    } else {
-        c >>= 4;
-    }
-    return c;
-}
-
 unsigned int
 processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
 {
   // extracts AMBE frames from X2TDMA frame
-  int i, j, k, dibit;
+  int i, j, k;
   unsigned char *dibit_p;
-  unsigned int total_errs = 0;
+  unsigned int dibit, total_errs = 0;
   char ambe_fr[4][24];
   char ambe_fr2[4][24];
   char ambe_fr3[4][24];
@@ -83,7 +60,7 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
       }
       cach_hdr  = ((cachbits[0] << 6) | (cachbits[4] << 5) | (cachbits[8] << 4) | (cachbits[12] << 3));
       cach_hdr |= ((cachbits[14] << 2) | (cachbits[18] << 1) | (cachbits[22] << 0));
-      cach_hdr_hamming = hamming7_4_correct(cach_hdr);
+      cach_hdr_hamming = Hamming7_4_Correct(cach_hdr);
 
       state->currentslot = ((cach_hdr_hamming >> 2) & 1);      // bit 2 
       if (state->currentslot == 0) {
@@ -128,14 +105,14 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
           }
       }
 
-      if ((state->lastsynctype & ~1) == 2) {
+      if ((state->lastsynctype >> 1) == 1) {
           mutecurrentslot = 1;
           if (state->currentslot == 0) {
               strcpy (state->slot0light, "[slot0]");
           } else {
               strcpy (state->slot1light, "[slot1]");
           }
-      } else if ((state->lastsynctype & ~1) == 14) {
+      } else if ((state->lastsynctype >> 1) == 7) {
           mutecurrentslot = 0;
           if (state->currentslot == 0) {
               strcpy (state->slot0light, "[SLOT0]");
@@ -228,7 +205,7 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
       }
       cach_hdr  = ((cachbits[0] << 0) | (cachbits[4] << 1) | (cachbits[8] << 2) | (cachbits[12] << 3));
       cach_hdr |= ((cachbits[14] << 4) | (cachbits[18] << 5) | (cachbits[22] << 6));
-      cach_hdr_hamming = hamming7_4_correct(cach_hdr);
+      cach_hdr_hamming = Hamming7_4_Correct(cach_hdr);
 
       // next slot
       skipDibit (opts, state, 54);

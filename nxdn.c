@@ -21,7 +21,8 @@ const char nxdnpr[175] = {
 unsigned int
 processNXDNVoice (dsd_opts * opts, dsd_state * state)
 {
-  unsigned int i, j, l1, l2, dibit, total_errs = 0;
+  unsigned int i, j, dibit, total_errs = 0;
+  uint64_t l1 = 0;
   unsigned char sacch[60];
   //unsigned char sacch_out[20];
   char ambe_fr[4][24];
@@ -36,10 +37,14 @@ processNXDNVoice (dsd_opts * opts, dsd_state * state)
   }
   //nxdn_conv_sacch_decode(sacch, sacch_out);
   //l = get_uint(sacch_out, 20);
-  l1 = get_uint(sacch, 30);
-  l2 = get_uint(sacch, 30);
-  printf("NXDN: SACCH: 0x%08x%08x\n", l1, l2); 
- 
+#if 0
+  for(i = 0; i < 60; i++) {
+    l1 <<= 1;
+    l1 |= sacch[i];
+  }
+  printf("NXDN: SACCH: 0x%016lx\n", l1); 
+#endif 
+
   for (j = 0; j < 4; j++) {
     for (i = 0; i < 36; i++) { 
       dibit = getDibit (opts, state);

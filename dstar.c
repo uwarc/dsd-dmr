@@ -151,21 +151,14 @@ static const unsigned char SCRAMBLER_TABLE_BITS[SCRAMBLER_TABLE_BITS_LENGTH+1] =
 
 unsigned int processDSTAR_HD(dsd_opts * opts, dsd_state * state) {
 	int radioheaderbuffer[660];
-	int radioheaderbuffer2[660];
-	unsigned int i, j, m_count = 0, bitcount = 0;
-	unsigned char bit2octet[] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80};
+	unsigned char radioheaderbuffer2[660];
+	unsigned int i, j = 0, bitcount = 0;
 	unsigned char radioheader[41];
 
-	for (j = 0; j < 660; j++) {
-	    radioheaderbuffer[j] = getDibit(opts, state);
+	for (i = 0; i < 660; i++) {
+	    radioheaderbuffer2[i] = getDibit(opts, state);
+	    radioheaderbuffer2[i] ^= SCRAMBLER_TABLE_BITS[i];
 	}
-
-    for (i=0; i < 660; i++) {
-	    radioheaderbuffer2[i] = radioheaderbuffer[i] ^ SCRAMBLER_TABLE_BITS[m_count++];
-	    if (m_count >= SCRAMBLER_TABLE_BITS_LENGTH) {
-		    m_count = 0U;
-	    }
-    }
 
     for (i = 0; i < 660; i++) {
         radioheaderbuffer[j] = radioheaderbuffer2[i];
@@ -188,7 +181,7 @@ unsigned int processDSTAR_HD(dsd_opts * opts, dsd_state * state) {
     }
 	for (i = 0; i < 328; i++) {
 		if (radioheaderbuffer2[i]) {
-			radioheader[(bitcount >> 3)] |= bit2octet[(bitcount & 7)];
+			radioheader[(bitcount >> 3)] |= (1U << (bitcount & 7));
 		}
 		bitcount++;
 	}

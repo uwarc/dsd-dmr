@@ -18,29 +18,6 @@
 #include "dsd.h"
 #include "dmr_const.h"
 
-static unsigned char hamming7_4_decode[64] =
-{
-    0x00, 0x01, 0x08, 0x24, 0x01, 0x11, 0x53, 0x91, 
-    0x06, 0x2A, 0x23, 0x22, 0xB3, 0x71, 0x33, 0x23, 
-    0x06, 0xC4, 0x54, 0x44, 0x5D, 0x71, 0x55, 0x54, 
-    0x66, 0x76, 0xE6, 0x24, 0x76, 0x77, 0x53, 0x7F, 
-    0x08, 0xCA, 0x88, 0x98, 0xBD, 0x91, 0x98, 0x99, 
-    0xBA, 0xAA, 0xE8, 0x2A, 0xBB, 0xBA, 0xB3, 0x9F, 
-    0xCD, 0xCC, 0xE8, 0xC4, 0xDD, 0xCD, 0x5D, 0x9F, 
-    0xE6, 0xCA, 0xEE, 0xEF, 0xBD, 0x7F, 0xEF, 0xFF, 
-};
-
-static unsigned char hamming7_4_correct(unsigned char value)
-{
-    unsigned char c = hamming7_4_decode[value >> 1];
-    if (value & 1) {
-        c &= 0x0F;
-    } else {
-        c >>= 4;
-    }
-    return c;
-}
-
 static unsigned char emb_fr[4][32];
 static unsigned int emb_fr_index = 0;
 static unsigned int emb_fr_valid = 0;
@@ -113,7 +90,7 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
       }
       cach_hdr  = ((cachbits[0] << 6) | (cachbits[4] << 5) | (cachbits[8] << 4) | (cachbits[12] << 3));
       cach_hdr |= ((cachbits[14] << 2) | (cachbits[18] << 1) | (cachbits[22] << 0));
-      cach_hdr_hamming = hamming7_4_correct(cach_hdr);
+      cach_hdr_hamming = Hamming7_4_Correct(cach_hdr);
 
       state->currentslot = ((cach_hdr_hamming >> 2) & 1);      // bit 2 
       if (state->currentslot == 0) {
@@ -239,7 +216,7 @@ processDMRvoice (dsd_opts * opts, dsd_state * state)
       }
       cach_hdr  = ((cachbits[0] << 0) | (cachbits[4] << 1) | (cachbits[8] << 2) | (cachbits[12] << 3));
       cach_hdr |= ((cachbits[14] << 4) | (cachbits[18] << 5) | (cachbits[22] << 6));
-      cach_hdr_hamming = hamming7_4_correct(cach_hdr);
+      cach_hdr_hamming = Hamming7_4_Correct(cach_hdr);
 
       // next slot
       skipDibit (opts, state, 54);
