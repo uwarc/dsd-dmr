@@ -130,9 +130,6 @@ processNXDNData (dsd_opts * opts, dsd_state * state, unsigned char lich[9])
       lich[i] = 1 & (dibit >> 1);
   }
 
-  closeMbeOutFile (opts, state);
-  state->errs2 = 0;
-
   skipDibit (opts, state, 174);
 }
 
@@ -148,8 +145,11 @@ processFrame (dsd_opts * opts, dsd_state * state)
   if (synctype == 3) {
       unsigned char lich[9];
       processNXDNData (opts, state, lich);
-      printf ("Sync: %s mod: %s offs: %4u inlvl: %2i%% DATA: %s Ch\n",
-              state->ftype, ((state->rf_mod == 2) ? "GFSK" : "QPSK"), state->offset, level,
+      closeMbeOutFile (opts, state);
+      state->errs2 = 0;
+      printf ("Sync: %c%s mod: %s offs: %4u inlvl: %2i%% DATA: %s Ch\n",
+              ((state->synctype & 1) ? '-' : '+'), state->ftype,
+              ((state->rf_mod == 2) ? "GFSK" : "QPSK"), state->offset, level,
               (lich[1] ? (lich[0] ? "Trunk-C Traffic" : "Trunk-D Composite") 
                        : (lich[0] ? "Trunk-C Control" : (lich[6] ? "Repeater" : "Mobile Direct"))));
       return;
@@ -166,8 +166,9 @@ processFrame (dsd_opts * opts, dsd_state * state)
       } else {
         snprintf(tmpStr, 1023, "Unable to correct errors in NAC/DUID (%s)", p25frametypes[state->duid]);
       }
-      printf ("Sync: %s mod: %s offs: %4u inlvl: %2i%% p25 NAC: 0x%03x, DUID: 0x%x -> %s\n",
-              state->ftype, ((state->rf_mod == 2) ? "GFSK" : "QPSK"), state->offset, level,
+      printf ("Sync: %c%s mod: %s offs: %4u inlvl: %2i%% p25 NAC: 0x%03x, DUID: 0x%x -> %s\n",
+              ((state->synctype & 1) ? '-' : '+'), state->ftype,
+              ((state->rf_mod == 2) ? "GFSK" : "QPSK"), state->offset, level,
               state->nac, state->duid, tmpStr);
       return;
   }
@@ -187,8 +188,8 @@ processFrame (dsd_opts * opts, dsd_state * state)
   } else if (synctype == 7) {
       total_errs = processX2TDMAvoice (opts, state);
   }
-  printf ("Sync: %s mod: %s, offs: %4u, inlvl: %2i%% %s %s  VOICE e: %u\n",
-          state->ftype, ((state->rf_mod == 2) ? "GFSK" : "QPSK"), state->offset, level,
+  printf ("Sync: %c%s mod: %s, offs: %4u, inlvl: %2i%% %s %s  VOICE e: %u\n",
+          ((state->synctype & 1) ? '-' : '+'), state->ftype, ((state->rf_mod == 2) ? "GFSK" : "QPSK"), state->offset, level,
           state->slot0light, state->slot1light, total_errs);
   return;
 }

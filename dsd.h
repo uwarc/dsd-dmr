@@ -151,6 +151,7 @@ typedef struct
 
   unsigned int debug_audio_errors;
   unsigned int debug_header_errors;
+  unsigned int debug_data_errors;
 
   unsigned int p25_bit_count;
   unsigned int p25_bit_error_count;
