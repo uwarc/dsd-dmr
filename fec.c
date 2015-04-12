@@ -169,6 +169,72 @@ unsigned int p25_lsd_cyclic1685_Encode(unsigned int input)
     return codeword_out;
 }
 
+/* Trellis encoder state transitions, composed with constellation to dibit pair mappings.
+ * \see Table 7-2/7-3 FDMA CAI Specification.
+ */
+static const uint8_t NEXT_WORDS[4][4] = {
+    { 0x2, 0xc, 0x1, 0xf },
+    { 0xe, 0x0, 0xd, 0x3 },
+    { 0x9, 0x7, 0xa, 0x4 },
+    { 0x5, 0xb, 0x6, 0x8 }
+};
+
+void p25_trellis_1_2_encode(uint8_t *data_in, unsigned int data_len, uint8_t *out)
+{
+    unsigned int i;
+    uint8_t state = 0;
+
+   // perform trellis encoding
+   for(i = 0; i < data_len; ++i) {
+      uint8_t d = (data_in[i] & 0x03);
+      out[i] = NEXT_WORDS[state][d];
+      state = d;
+   }
+   out[data_len] = NEXT_WORDS[state][0];
+}
+
+unsigned int p25_trellis_1_2_decode(uint8_t *in, uint32_t in_sz, uint8_t *out)
+{
+   uint8_t state = 0;
+   unsigned int i, j;
+
+   /* bit counts
+    */
+   static const uint8_t BIT_COUNT[] = {
+      0, 1, 1, 2,
+      1, 2, 2, 3,
+      1, 2, 2, 3,
+      2, 3, 3, 4
+   };
+
+   // perform trellis decoding
+   in_sz--;
+   for(i = 0; i < in_sz; ++i) {
+      uint8_t codeword = (in[i] & 0x0f);
+      // find dibit with minimum Hamming distance
+      uint8_t m = 0;
+      uint8_t ns = UINT8_MAX;
+      uint8_t hd = UINT8_MAX;
+      for(j = 0; j < 4; j++) {
+         uint8_t n;
+         n = BIT_COUNT[codeword ^ NEXT_WORDS[state][j]];
+         if(n < hd) {
+            m = 1;
+            hd = n;
+            ns = j;
+         } else if(n == hd) {
+            ++m;
+         }
+      }
+      if(m != 1) {
+        return i;
+      }
+      state = ns;
+      out[i] = state;
+   }
+   return 0;
+}
+
 void Golay23_Correct(unsigned int *block)
 {
   unsigned int i, syndrome = 0;
