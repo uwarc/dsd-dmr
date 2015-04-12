@@ -305,7 +305,7 @@ main (int argc, char **argv)
   sigaction(SIGPIPE, &vec, NULL);
 
 #ifndef NO_REEDSOLOMON
-  rs8_init(&state.ReedSolomon_12_09_04, generator_polynomial_dmr, 2);
+  //rs8_init(&state.ReedSolomon_12_09_04, generator_polynomial_dmr, 2);
   //rs6_init(&state.ReedSolomon_24_12_13, generator_polynomial_p25, 6);
   //rs6_init(&state.ReedSolomon_36_20_17, generator_polynomial_p25, 8);
 #endif

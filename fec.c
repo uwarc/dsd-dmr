@@ -172,7 +172,7 @@ unsigned int p25_lsd_cyclic1685_Encode(unsigned int input)
 /* Trellis encoder state transitions, composed with constellation to dibit pair mappings.
  * \see Table 7-2/7-3 FDMA CAI Specification.
  */
-static const uint8_t NEXT_WORDS[4][4] = {
+static const uint8_t p25_trellis_1_2_next_words[4][4] = {
     { 0x2, 0xc, 0x1, 0xf },
     { 0xe, 0x0, 0xd, 0x3 },
     { 0x9, 0x7, 0xa, 0x4 },
@@ -187,10 +187,10 @@ void p25_trellis_1_2_encode(uint8_t *data_in, unsigned int data_len, uint8_t *ou
    // perform trellis encoding
    for(i = 0; i < data_len; ++i) {
       uint8_t d = (data_in[i] & 0x03);
-      out[i] = NEXT_WORDS[state][d];
+      out[i] = p25_trellis_1_2_next_words[state][d];
       state = d;
    }
-   out[data_len] = NEXT_WORDS[state][0];
+   out[data_len] = p25_trellis_1_2_next_words[state][0];
 }
 
 unsigned int p25_trellis_1_2_decode(uint8_t *in, uint32_t in_sz, uint8_t *out)
@@ -217,7 +217,7 @@ unsigned int p25_trellis_1_2_decode(uint8_t *in, uint32_t in_sz, uint8_t *out)
       uint8_t hd = UINT8_MAX;
       for(j = 0; j < 4; j++) {
          uint8_t n;
-         n = BIT_COUNT[codeword ^ NEXT_WORDS[state][j]];
+         n = BIT_COUNT[codeword ^ p25_trellis_1_2_next_words[state][j]];
          if(n < hd) {
             m = 1;
             hd = n;
@@ -267,9 +267,11 @@ unsigned int Golay23_Encode(unsigned int cw)
   return((cw<<12)|c);    /* assemble codeword */
 }
 
+#if 0
 #define MM 6
 #include "ReedSolomon.c"
 #undef MM
 #define MM 8
 #include "ReedSolomon.c"
+#endif
 
