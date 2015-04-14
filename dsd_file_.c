@@ -16,6 +16,7 @@
  */
 
 #include "dsd.h"
+#include "mbe_const.h"
 
 void saveAmbe2450Data (dsd_opts * opts, dsd_state * state, char *ambe_d)
 {
@@ -61,23 +62,6 @@ void saveImbe4400Data (dsd_opts * opts, dsd_state * state, char *imbe_d)
       buf[i+1] = b;
   }
   write(opts->mbe_out_fd, buf, 12);
-}
-
-static unsigned int mbe_golay2312 (unsigned int *block)
-{
-  unsigned int i, errs = 0, in = *block;
-
-  Golay23_Correct (block);
-
-  in >>= 11;
-  in ^= *block;
-  for (i = 0; i < 12; i++) {
-      if ((in >> i) & 1) {
-          errs++;
-      }
-  }
-
-  return (errs);
 }
 
 static void mbe_demodulateImbe7200x4400Data (char imbe[8][23])
@@ -127,7 +111,7 @@ static int mbe_eccImbe7200x4400Data (char imbe_fr[8][23], char *imbe_d)
           block <<= 1;
           block |= imbe_fr[i][j];
       }
-      errs += mbe_golay2312 (&block);
+      errs += Golay23_CorrectAndGetErrCount(&block);
       for (j = 0; j < 12; j++) {
           *imbe++ = ((block >> j) & 1);
       }
@@ -153,9 +137,17 @@ static int mbe_eccImbe7200x4400Data (char imbe_fr[8][23], char *imbe_d)
   return (errs);
 }
 
-void
-process_IMBE (dsd_opts* opts, dsd_state* state, char imbe_fr[8][23])
+void process_IMBE (dsd_opts* opts, dsd_state* state, unsigned char imbe_dibits[72])
 {
+  unsigned int i, dibit;
+  char imbe_fr[8][23];
+
+  for (i = 0; i < 72; i++) {
+      dibit = imbe_dibits[i];
+      imbe_fr[iW[i]][iX[i]] = (1 & (dibit >> 1)); // bit 1
+      imbe_fr[iY[i]][iZ[i]] = (1 & dibit);        // bit 0
+  }
+
   //if (state->p25kid == 0)
   {
     // Check for a non-standard c0 transmitted. This is explained here: https://github.com/szechyjs/dsd/issues/24
@@ -172,7 +164,7 @@ process_IMBE (dsd_opts* opts, dsd_state* state, char imbe_fr[8][23])
         printf("(Non-standard IMBE c0 detected, skipped)\n");
     } else {
         char imbe_d[88];
-        state->errs2 = mbe_golay2312 (&block);
+        state->errs2 = Golay23_CorrectAndGetErrCount(&block);
         for (j = 11; j >= 0; j--) {
             imbe_fr[0][j+11] = (block & 0x0800) >> 11;
             block <<= 1;
@@ -199,7 +191,7 @@ void demodAmbe3600x24x0Data (int *errs2, char ambe_fr[4][24], char *ambe_d)
       block |= ambe_fr[0][j+1];
   }
 
-  errs = mbe_golay2312(&block);
+  errs = Golay23_CorrectAndGetErrCount(&block);
 
   // create pseudo-random modulator
   foo = block;
@@ -219,12 +211,12 @@ void demodAmbe3600x24x0Data (int *errs2, char ambe_fr[4][24], char *ambe_d)
   // demodulate C1 with pr
   // then, ecc and copy C1
   k = 1;
-  for (i = 22; i >= 0; i--) {
+  for (j = 22; j >= 0; j--) {
       block <<= 1;
-      block |= (ambe_fr[1][i] ^ pr[k++]);
+      block |= (ambe_fr[1][j] ^ pr[k++]);
   }
 
-  errs += mbe_golay2312(&block);
+  errs += Golay23_CorrectAndGetErrCount(&block);
   for (j = 11; j >= 0; j--) {
       *ambe++ = ((block >> j) & 1);
   }
@@ -252,9 +244,17 @@ void mbe_initMbeParms (mbe_parms * cur_mp, mbe_parms * prev_mp, mbe_parms * prev
 }
 
 void
-processAMBEFrame (dsd_opts * opts, dsd_state * state, char ambe_fr[4][24])
+processAMBEFrame (dsd_opts * opts, dsd_state * state, unsigned char ambe_dibits[36])
 {
+  unsigned int i, dibit;
+  char ambe_fr[4][24];
   char ambe_d[49];
+
+  for (i = 0; i < 36; i++) {
+    dibit = ambe_dibits[i];
+    ambe_fr[rW[i]][rX[i]] = (1 & (dibit >> 1));        // bit 1
+    ambe_fr[rY[i]][rZ[i]] = (1 & dibit);       // bit 0
+  }
 
   demodAmbe3600x24x0Data (&state->errs2, ambe_fr, ambe_d);
   if (opts->mbe_out_fd != -1) {

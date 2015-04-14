@@ -16,7 +16,6 @@
  */
 
 #include "dsd.h"
-#include "x2tdma_const.h"
 
 unsigned int
 processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
@@ -25,9 +24,7 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
   int i, j, k;
   unsigned char *dibit_p;
   unsigned int dibit, total_errs = 0;
-  char ambe_fr[4][24];
-  char ambe_fr2[4][24];
-  char ambe_fr3[4][24];
+  unsigned char ambe_dibits1[36], ambe_dibits2[36], ambe_dibits3[36];
   char sync[25];
   unsigned char syncdata[24];
   unsigned char infodata[82];
@@ -35,7 +32,7 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
   unsigned char cachbits[25];
   unsigned char cach_hdr = 0, cach_hdr_hamming = 0;
   unsigned char eeei = 0, aiei = 0;
-  int mutecurrentslot = 0;
+  int mutecurrentslot = 0, invertedSync = 0;
 
   dibit_p = state->dibit_buf_p - 120;
   for (j = 0; j < 6; j++) {
@@ -82,8 +79,7 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
           } else {
               dibit = *dibit_p++;
           }
-          ambe_fr[aW[i]][aX[i]] = (1 & (dibit >> 1)); // bit 1
-          ambe_fr[aY[i]][aZ[i]] = (1 & dibit);        // bit 0
+          ambe_dibits1[i] = dibit;
       }
 
       // current slot frame 2 first half
@@ -93,15 +89,13 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
           } else {
               dibit = *dibit_p++;
           }
-          ambe_fr2[aW[i]][aX[i]] = (1 & (dibit >> 1));        // bit 1
-          ambe_fr2[aY[i]][aZ[i]] = (1 & dibit);       // bit 0
+          ambe_dibits2[i] = dibit;
       }
 
       // signaling data or sync
       if (j > 0) {
           for (i = 0; i < 24; i++) {
-              dibit = getDibit (opts, state);
-              syncdata[i] = dibit;
+              syncdata[i] = getDibit (opts, state);
           }
       }
 
@@ -165,35 +159,45 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
               infodata[10] = (1 & (syncdata[12] >> 1)); // bit 1
               infodata[21] = (1 & syncdata[12]);      // bit 0
           }
+      }
+
+      if (j > 0) {
+        unsigned int syncdata1 = 0, syncdata2 = 0;
+        for (i = 0; i < 12; i++) {
+            syncdata1 <<= 2;
+            syncdata2 <<= 2;
+            syncdata1 |= syncdata[i];
+            syncdata2 |= syncdata[i+12];
         }
+        if (((syncdata1 == 0x005DDFFD) && (syncdata2 == 0x00DFD5F5)) ||
+            ((syncdata1 == 0x0077D57F) && (syncdata2 == 0x00FF555D))) {
+            invertedSync++;
+        }
+      }
 
       // current slot frame 2 second half
       for (i = 0; i < 18; i++) {
-          dibit = getDibit (opts, state);
-          ambe_fr2[aW[i+18]][aX[i+18]] = (1 & (dibit >> 1));        // bit 1
-          ambe_fr2[aY[i+18]][aZ[i+18]] = (1 & dibit);       // bit 0
+          ambe_dibits2[i+18] = getDibit (opts, state);
       }
 
       if (mutecurrentslot == 0) {
           if (state->firstframe == 1) { // we don't know if anything received before the first sync after no carrier is valid
               state->firstframe = 0;
           } else {
-              processAMBEFrame (opts, state, ambe_fr);
+              processAMBEFrame (opts, state, ambe_dibits1);
               total_errs += state->errs2;
-              processAMBEFrame (opts, state, ambe_fr2);
+              processAMBEFrame (opts, state, ambe_dibits2);
               total_errs += state->errs2;
           }
       }
 
       // current slot frame 3
       for (i = 0; i < 36; i++) {
-          dibit = getDibit (opts, state);
-          ambe_fr3[aW[i]][aX[i]] = (1 & (dibit >> 1));        // bit 1
-          ambe_fr3[aY[i]][aZ[i]] = (1 & dibit);       // bit 0
+          ambe_dibits3[i] = getDibit (opts, state);
       }
 
       if (mutecurrentslot == 0) {
-          processAMBEFrame (opts, state, ambe_fr3);
+          processAMBEFrame (opts, state, ambe_dibits3);
           total_errs += state->errs2;
       }
 
@@ -249,6 +253,10 @@ processX2TDMAvoice (dsd_opts * opts, dsd_state * state)
         lcinfo[2] = get_uint(infodata+48, 24);
         //decode_p25_lcf(lcinfo);
     }
+
+    if(invertedSync >= 2) // Things are inverted
+        opts->inverted_x2tdma ^= 1;
+
     return total_errs;
 }
 
