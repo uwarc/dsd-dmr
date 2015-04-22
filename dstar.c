@@ -30,10 +30,10 @@ unsigned int processDSTAR(dsd_opts * opts, dsd_state * state) {
 	// extracts AMBE frames from D-STAR voice frame
 	int i, j, dibit;
 	char ambe_fr[4][24];
-	int total_errs = 0, sync_missed = 0, framecount;
+	unsigned int total_errs = 0, sync_missed = 0, framecount;
 	unsigned char slowdata[4];
 	unsigned int bitbuffer = 0;
-	const int *w, *x;
+	const unsigned char *w, *x;
 
 	if (state->synctype == 18) {
 		framecount = 0;
@@ -46,7 +46,10 @@ unsigned int processDSTAR(dsd_opts * opts, dsd_state * state) {
 	}
 
 	while (sync_missed < 3) {
-		memset(ambe_fr, 0, 96);
+        for (i = 0; i < 24; i++) {
+            ambe_fr[0][i] = ambe_fr[1][i] = ambe_fr[2][i] = ambe_fr[3][i] = 0;
+        }
+
 		// voice frame
 	    w = dW;
 	    x = dX;
@@ -59,7 +62,7 @@ unsigned int processDSTAR(dsd_opts * opts, dsd_state * state) {
 			}
 			if ((bitbuffer & 0x00FFFFFF) == 0x00AAB468) {
 				// we're slipping bits
-				printf("sync in voice after i=%d, restarting\n", i);
+				printf("sync in voice after i=%u, restarting\n", i);
 				//ugh just start over
 				i = 0;
 			    w = dW;
@@ -67,9 +70,7 @@ unsigned int processDSTAR(dsd_opts * opts, dsd_state * state) {
 				framecount = 1;
 				continue;
 			}
-			ambe_fr[*w][*x] = (1 & dibit);
-			w++;
-			x++;
+			ambe_fr[*w++][*x++] = (1 & dibit);
 		}
 		processAMBEFrame(opts, state, ambe_fr);
         total_errs += state->errs2;
@@ -97,14 +98,14 @@ unsigned int processDSTAR(dsd_opts * opts, dsd_state * state) {
 
 		if ((bitbuffer & 0x00FFFFFF) == 0x00AAB468) {
 			//We got sync!
-			//printf("Sync on framecount = %d\n", framecount);
+			//printf("Sync on framecount = %u\n", framecount);
 			sync_missed = 0;
 		} else if ((bitbuffer & 0x00FFFFFF) == 0xAAAAAA) {
 			//End of transmission
 			//printf("End of transmission\n");
 			goto end;
 		} else if (framecount % 21 == 0) {
-			printf("Missed sync on framecount = %d, value = %x/%x/%x\n",
+			printf("Missed sync on framecount = %u, value = %x/%x/%x\n",
 					framecount, slowdata[0], slowdata[1], slowdata[2]);
 			sync_missed++;
 		} else if (framecount != 0 && (bitbuffer & 0x00FFFFFF) != 0x000000) {
