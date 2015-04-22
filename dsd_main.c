@@ -187,6 +187,7 @@ static void initState (dsd_state * state)
 
   state->debug_audio_errors = 0;
   state->debug_header_errors = 0;
+  state->debug_data_errors = 0;
 
 #ifdef TRACE_DSD
   state->debug_sample_index = 0;
@@ -250,7 +251,8 @@ cleanupAndExit (dsd_opts * opts, dsd_state * state)
   }
   close(opts->wav_out_fd);
 
-  printf("\nTotal audio errors: %u\nTotal header errors: %u\n", state->debug_audio_errors, state->debug_header_errors);
+  printf("\nTotal audio errors: %u\nTotal header errors: %u\nTotal data/trunking CC packet errors: %u\n",
+         state->debug_audio_errors, state->debug_header_errors, state->debug_data_errors);
 
 #ifdef TRACE_DSD
   if (state->debug_label_file != NULL) {
@@ -283,6 +285,7 @@ main (int argc, char **argv)
   extern int optind, opterr, optopt;
   char *audio_in_dev = NULL;
   unsigned int Fs = 48000;
+  float rrc_alpha = 0.2f;
   dsd_opts opts;
   dsd_state state;
   char versionstr[25];
@@ -375,9 +378,12 @@ main (int argc, char **argv)
           }
           printf ("Setting unvoice speech quality to %i waves per band.\n", opts.uvquality);
           break;
+        case 'B':
+          rrc_alpha = strtod(optarg, NULL);
+          break;
         case 'r':
           Fs = strtoul(optarg, NULL, 10);
-          dsd_gen_root_raised_cosine((float)Fs, 4800.0f);
+          dsd_gen_root_raised_cosine((float)Fs, 4800.0f, rrc_alpha);
           state.d_symbol_time = (4800.0f / (float)Fs);
           break;
         case 'x':

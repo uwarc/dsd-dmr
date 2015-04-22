@@ -622,6 +622,7 @@ processTSDU(dsd_opts* opts, dsd_state* state)
       out[i] = ((raw_dibits[4*i] << 6) | (raw_dibits[4*i+1] << 4) | (raw_dibits[4*i+2] << 2) | (raw_dibits[4*i+3] << 0));
     }
     if (err) {
+      state->debug_data_errors++;
       printf("TSBK: mfid: 0x%02x, lb: %u, opcode: 0x%02x, err: trellis decode failed, offset: %u\n",
              out[1], (out[0] >> 7), (out[0] & 0x3f), err);
     } else {
