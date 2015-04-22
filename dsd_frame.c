@@ -39,31 +39,19 @@ static const char *p25frametypes[16] = {
 static unsigned char
 get_p25_nac_and_duid(dsd_opts *opts, dsd_state *state)
 {
-  // Read the NAC, 12 bits
+  // Read the NAC and DUID, 16 bits
   uint64_t bch_code = 0;
-  unsigned short nac = 0, new_nac = 0;
-  unsigned char duid = 0, new_duid = 0;
+  unsigned short nid = 0, new_nid = 0;
   unsigned int i, dibit;
   int check_result;
 
-  for (i = 0; i < 6; i++) {
+  for (i = 0; i < 8; i++) {
       dibit = getDibit (opts, state);
-      nac <<= 2;
-      nac |= dibit;
+      nid <<= 2;
+      nid |= dibit;
       bch_code <<= 2;
       bch_code |= dibit;
   }
-
-  // Read the DUID, 4 bits
-  dibit = getDibit (opts, state);
-  duid  = (dibit << 2);
-  bch_code <<= 2;
-  bch_code |= dibit;
-
-  dibit = getDibit (opts, state);
-  duid |= (dibit << 0);
-  bch_code <<= 2;
-  bch_code |= dibit;
 
   // Read the BCH data for error correction of NAC and DUID
   for (i = 0; i < 3; i++) {
@@ -92,25 +80,17 @@ get_p25_nac_and_duid(dsd_opts *opts, dsd_state *state)
   // Ideas taken from http://op25.osmocom.org/trac/wiki.png/browser/op25/gr-op25/lib/decoder_ff_impl.cc
   // See also p25_training_guide.pdf page 48.
   // See also tia-102-baaa-a-project_25-fdma-common_air_interface.pdf page 40.
-  check_result = bchDec(bch_code, &new_nac);
+  check_result = bchDec(bch_code, &new_nid);
   if (check_result >= 0) {
-      new_duid = (new_nac & 0x0F);
-      new_nac >>= 4;
-      if (new_nac != nac) {
-          // NAC fixed by error correction
-          printf("old_nac: 0x%03x -> nac: 0x%03x\n", nac, new_nac);
-          nac = new_nac;
-          state->debug_header_errors++;
-      }
-      if (new_duid != duid) {
-          // DUID fixed by error correction
-          printf("old_duid: 0x%x -> duid: 0x%x\n", duid, new_duid);
-          duid = new_duid;
+      if (new_nid != nid) {
+          // NAC/DUID fixed by error correction
+          printf("old_nid: 0x%03x -> nid: 0x%03x\n", nid, new_nid);
+          nid = new_nid;
           state->debug_header_errors++;
       }
   }
-  state->nac = nac;
-  state->duid = duid;
+  state->nac = (nid >> 4);
+  state->duid = (nid & 0x0F);
   return (check_result >= 0);
 }
 
