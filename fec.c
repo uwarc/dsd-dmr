@@ -201,10 +201,8 @@ unsigned int p25_trellis_1_2_decode(uint8_t *in, uint32_t in_sz, uint8_t *out)
    /* bit counts
     */
    static const uint8_t BIT_COUNT[] = {
-      0, 1, 1, 2,
-      1, 2, 2, 3,
-      1, 2, 2, 3,
-      2, 3, 3, 4
+      0, 1, 1, 2, 1, 2, 2, 3, /* 0xE994 */ 
+      1, 2, 2, 3, 2, 3, 3, 4
    };
 
    // perform trellis decoding
@@ -266,12 +264,4 @@ unsigned int Golay23_Encode(unsigned int cw)
   }
   return((cw<<12)|c);    /* assemble codeword */
 }
-
-#if 0
-#define MM 6
-#include "ReedSolomon.c"
-#undef MM
-#define MM 8
-#include "ReedSolomon.c"
-#endif
 

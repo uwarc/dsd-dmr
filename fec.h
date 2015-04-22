@@ -22,7 +22,7 @@ void Hamming15_11_3_Correct(unsigned int *block);
 void p25_Hamming10_6_4_Correct(unsigned int *codeword);
 void p25_Hamming15_11_3_Correct(unsigned int *codeword);
 void p25_lsd_cyclic1685_Correct(unsigned int *codeword);
-void p25_trellis_1_2_encode(unsigned char *data_in, unsigned int data_len, unsigned char *out);
+unsigned int p25_trellis_1_2_decode(unsigned char *in, unsigned int in_sz, unsigned char *out);
 void Golay23_Correct(unsigned int *block);
 
 unsigned char Hamming7_4_Encode(unsigned char value);
@@ -30,7 +30,7 @@ unsigned int Hamming15_11_3_Encode(unsigned int input);
 unsigned int p25_Hamming10_6_4_Encode(unsigned int input);
 unsigned int p25_Hamming15_11_3_Encode(unsigned int input);
 unsigned int p25_lsd_cyclic1685_Encode(unsigned int input);
-unsigned int p25_trellis_1_2_decode(unsigned char *in, unsigned int in_sz, unsigned char *out);
+void p25_trellis_1_2_encode(unsigned char *data_in, unsigned int data_len, unsigned char *out);
 unsigned int Golay23_Encode(unsigned int cw);
 
 void rs8_init(ReedSolomon *rs, unsigned int generator_polinomial, unsigned char tt);
