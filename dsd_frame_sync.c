@@ -263,7 +263,7 @@ getFrameSync (dsd_opts * opts, dsd_state * state)
             }
             goto update_sync_and_return;
           }
-          if ((memcmp (synctest, DSTAR_HD, 24) == 0) || (memcmp (synctest, INV_DSTAR_HD, 24) == 0)) {
+          if ((memcmp (synctest, DSTAR_HD_SYNC, 24) == 0) || (memcmp (synctest, INV_DSTAR_HD_SYNC, 24) == 0)) {
             state->offset = synctest_pos;
             strcpy (state->ftype, "D-STARHD");
             if (synctest[0] == '1') {
