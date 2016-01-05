@@ -304,7 +304,7 @@ void processIMBEFrame (dsd_opts * opts, dsd_state * state, char imbe_d[88]);
 void process_IMBE (dsd_opts* opts, dsd_state* state, unsigned char imbe_dibits[72]);
 int getSymbol (dsd_opts * opts, dsd_state * state, int have_sync);
 void dsd_gen_root_raised_cosine(float sampling_freq, float symbol_rate, float alpha);
-void processEmb (dsd_state *state, unsigned char lcss, unsigned int emb_fr[4]);
+void processEmb (dsd_state *state, unsigned char lcss, unsigned char emb_fr[4][32]);
 void processDMRdata (dsd_opts * opts, dsd_state * state);
 unsigned int processDMRvoice (dsd_opts * opts, dsd_state * state);
 unsigned int processNXDNVoice (dsd_opts * opts, dsd_state * state);
