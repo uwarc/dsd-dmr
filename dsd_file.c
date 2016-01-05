@@ -140,7 +140,7 @@ writeSynthesizedVoice (dsd_opts * opts, dsd_state * state)
   write(opts->wav_out_fd, aout_buf, 160 * sizeof(int16_t));
 }
 
-static void mbe_demodulateImbe7200x4400Data (char imbe[8][23])
+void mbe_demodulateImbe7200x4400Data (char imbe[8][23])
 {
   int i, j = 0, k;
   unsigned short pr[115], foo = 0;
@@ -171,7 +171,7 @@ static void mbe_demodulateImbe7200x4400Data (char imbe[8][23])
   }
 }
 
-static int mbe_eccImbe7200x4400Data (char imbe_fr[8][23], char *imbe_d)
+int mbe_eccImbe7200x4400Data (char imbe_fr[8][23], char *imbe_d)
 {
   int i, j = 0, errs = 0;
   unsigned int hin, block;
@@ -320,8 +320,8 @@ processAMBEFrame (dsd_opts * opts, dsd_state * state, unsigned char ambe_dibits[
 
   for (i = 0; i < 36; i++) {
     dibit = ambe_dibits[i];
-    ambe_fr[rW[i]][rX[i]] = (1 & (dibit >> 1));        // bit 1
-    ambe_fr[rY[i]][rZ[i]] = (1 & dibit);       // bit 0
+    ambe_fr[rW[2*i+0]][rX[2*i+0]] = (1 & (dibit >> 1));        // bit 1
+    ambe_fr[rW[2*i+1]][rX[2*i+1]] = (1 & dibit);       // bit 0
   }
   demodAmbe3600x24x0Data (&state->errs2, ambe_fr, ambe_d);
 
