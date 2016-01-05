@@ -143,61 +143,6 @@ static unsigned char cach_deinterleave[24] = {
     18, 19,  5, 20, 21, 22,  6, 23
 }; 
 
-static unsigned char hamming7_4_encode[16] =
-{
-    0x00, 0x0b, 0x16, 0x1d, 0x27, 0x2c, 0x31, 0x3a,
-    0x45, 0x4e, 0x53, 0x58, 0x62, 0x69, 0x74, 0x7f
-};
-
-static unsigned char hamming7_4_decode[64] =
-{
-    0x00, 0x01, 0x08, 0x24, 0x01, 0x11, 0x53, 0x91, 
-    0x06, 0x2A, 0x23, 0x22, 0xB3, 0x71, 0x33, 0x23, 
-    0x06, 0xC4, 0x54, 0x44, 0x5D, 0x71, 0x55, 0x54, 
-    0x66, 0x76, 0xE6, 0x24, 0x76, 0x77, 0x53, 0x7F, 
-    0x08, 0xCA, 0x88, 0x98, 0xBD, 0x91, 0x98, 0x99, 
-    0xBA, 0xAA, 0xE8, 0x2A, 0xBB, 0xBA, 0xB3, 0x9F, 
-    0xCD, 0xCC, 0xE8, 0xC4, 0xDD, 0xCD, 0x5D, 0x9F, 
-    0xE6, 0xCA, 0xEE, 0xEF, 0xBD, 0x7F, 0xEF, 0xFF, 
-};
-
-static unsigned char hamming7_4_correct(unsigned char value)
-{
-    unsigned char c = hamming7_4_decode[value >> 1];
-    if (value & 1) {
-        c &= 0x0F;
-    } else {
-        c >>= 4;
-    }
-    return c;
-}
-
-// Hamming (15, 11, 3)
-static unsigned int Hamming15113Gen[11] = {
-    0x4009, 0x200d, 0x100f, 0x080e, 0x0407, 0x020a, 0x0105, 0x008b, 0x004c, 0x0026, 0x0013
-};
-
-static unsigned int Hamming15113Table[16] = {
-    0x0000, 0x0001, 0x0002, 0x0013, 0x0004, 0x0105, 0x0026, 0x0407,
-    0x0008, 0x4009, 0x020A, 0x008b, 0x004C, 0x200D, 0x080E, 0x100F
-};
-
-void Hamming15_11_3_Correct(unsigned int *block)
-{
-    unsigned int i, codeword = *block, ecc = 0, syndrome;
-    for(i = 0; i < 11; i++) {
-        if((codeword & Hamming15113Gen[i]) > 0xf)
-            ecc ^= Hamming15113Gen[i];
-    }
-    syndrome = ecc ^ codeword;
-
-    if (syndrome != 0) {
-      codeword ^= Hamming15113Table[syndrome & 0x0f];
-    }
-
-    *block = (codeword >> 4);
-}
-
 static const char hex[]="0123456789abcdef";
 static void hexdump_packet(unsigned char *pkt, unsigned int pktlen, unsigned char packetdump[37])
 {
@@ -520,7 +465,7 @@ processDMRdata (dsd_opts * opts, dsd_state * state)
   }
   cach1_hdr  = ((cach1bits[0] << 6) | (cach1bits[1] << 5) | (cach1bits[2] << 4) | (cach1bits[3] << 3));
   cach1_hdr |= ((cach1bits[4] << 2) | (cach1bits[5] << 1) | (cach1bits[6] << 0));
-  cach1_hdr_hamming = hamming7_4_correct(cach1_hdr);
+  cach1_hdr_hamming = Hamming7_4_Correct(cach1_hdr);
 
   state->currentslot = ((cach1_hdr_hamming >> 2) & 1);      // bit 2 
   if (state->currentslot == 0) {
