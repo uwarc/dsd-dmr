@@ -1,5 +1,4 @@
 #include "dsd.h"
-#include "nxdn_const.h"
 
 /*
  * NXDN SACCH interleave
