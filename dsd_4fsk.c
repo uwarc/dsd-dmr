@@ -275,7 +275,10 @@ static inline float fast_cosf(float x) {
 float ngain = 0.101333437f;
 float nxgain = 0.062659371644565f;
 
-float dsd_gen_root_raised_cosine(float sampling_freq, float symbol_rate)
+/*
+ * TODO: make it so we use alpha instead of ignoring it and always using alpha=0.2
+ */
+float dsd_gen_root_raised_cosine(float sampling_freq, float symbol_rate, float alpha)
 {
     float bps = symbol_rate/sampling_freq; // symbols/samples per bit
     float scale = 0.0f;
@@ -354,10 +357,13 @@ static inline float fast_atanf(float z)
   unsigned int index;
 
   if (z > 1.0f) {
+#if defined(__amd64__) || defined(__x86_64__) || defined(__i386__) && defined(__SSE__)
     __asm__ volatile("rcpss %1, %0 \t\n" 
                     :"=x"(z) :"x"(z_in));
     z *= (2.0f-z*z_in);
-    //z = 1.0f/z;
+#else
+    z = 1.0f/z;
+#endif
   }
 
   /* when ratio approaches the table resolution, the angle is */
