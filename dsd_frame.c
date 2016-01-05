@@ -166,7 +166,7 @@ processFrame (dsd_opts * opts, dsd_state * state)
   } else if (synctype == 6) {
       total_errs = processDMRvoice (opts, state);
   } else if (synctype == 7) {
-      total_errs = processX2TDMAvoice (opts, state);
+      //total_errs = processX2TDMAvoice (opts, state);
   }
   printf ("Sync: %c%s mod: %s, offs: %4u, inlvl: %2i%% %s %s  VOICE e: %u\n",
           ((state->synctype & 1) ? '-' : '+'), state->ftype, ((state->rf_mod == 2) ? "GFSK" : "QPSK"), state->offset, level,
